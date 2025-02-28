@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: nombre-de-tu-app
+    name: api-flask-ticket
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
