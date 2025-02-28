@@ -17,3 +17,4 @@ Werkzeug==3.1.3
 gunicorn
 Flask
 pytz
+python-dotenv
