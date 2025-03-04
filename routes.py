@@ -102,7 +102,7 @@ def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo
     enviar_correo_async(agente_nuevo.correo, asunto, cuerpo)
 
 
-# 🔹 Decorador para proteger rutas según el rol
+# 🔹 Decorador para proteger rutas según el rol  
 def role_required(roles_permitidos):
     def decorator(func):
         @wraps(func)

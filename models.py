@@ -113,4 +113,4 @@ class TicketComentario(db.Model):
     ticket = db.relationship('Ticket', backref='comentarios', lazy='joined')
     usuario = db.relationship('Usuario', backref='comentarios', lazy='joined')
 
-    #fin
+    #fin  
