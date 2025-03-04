@@ -15,6 +15,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from utils import enviar_correo_async
 
 
 api = Blueprint('api', __name__)
@@ -24,31 +25,6 @@ auth = Blueprint('auth', __name__)
 load_dotenv()
 
 CHILE_TZ = pytz.timezone('America/Santiago')
-
-   # Envío por Correo
-def enviar_correo(destinatario, asunto, cuerpo):
-    # Configuración del servidor SMTP
-    smtp_server = "smtp.gmail.com"
-    smtp_port = 587
-    smtp_usuario = "desarrollo@lahornilla.cl"
-    smtp_clave = "paine2023!"
-
-    # Crear el mensaje
-    mensaje = MIMEMultipart()
-    mensaje['From'] = smtp_usuario
-    mensaje['To'] = destinatario
-    mensaje['Subject'] = asunto
-    mensaje.attach(MIMEText(cuerpo, 'html'))
-
-     # Enviar el correo
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port) as servidor:
-            servidor.starttls()  # Iniciar conexión segura (TLS)
-            servidor.login(smtp_usuario, smtp_clave)
-            servidor.send_message(mensaje)
-        print("Correo enviado exitosamente")
-    except Exception as e:
-        print(f"Error al enviar el correo: {e}")
 
 # Función de notificación por correo
 def notificar_creacion_ticket(ticket, usuario, agente):
@@ -63,9 +39,9 @@ def notificar_creacion_ticket(ticket, usuario, agente):
     </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
     """
-    enviar_correo(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
     if agente:
-        enviar_correo(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
 
 def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
     asunto = f"Ticket {ticket.id} Cambió de Estado"
@@ -74,9 +50,9 @@ def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
     <p>El ticket con ID {ticket.id} ha cambiado su estado a <strong>{nuevo_estado}</strong>.</p>
     <p>Por favor, revisa el sistema para más detalles.</p>
     """
-    enviar_correo(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
     if agente:
-        enviar_correo(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
 
 def notificar_cierre_ticket(ticket, usuario, agente):
     asunto = f"Ticket {ticket.id} Cerrado"
@@ -85,9 +61,9 @@ def notificar_cierre_ticket(ticket, usuario, agente):
     <p>El ticket con ID {ticket.id} ha sido cerrado.</p>
     <p>Por favor, revisa el sistema para más detalles.</p>
     """
-    enviar_correo(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
     if agente:
-        enviar_correo(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
 
 def notificar_comentario(ticket, usuario, agente, comentario):
     asunto = f"Nuevo Comentario en el Ticket {ticket.id}"
@@ -97,9 +73,9 @@ def notificar_comentario(ticket, usuario, agente, comentario):
     <blockquote>{comentario}</blockquote>
     <p>Por favor, revisa el sistema para más detalles.</p>
     """
-    enviar_correo(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
     if agente:
-        enviar_correo(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
 
 
 def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo):
@@ -116,14 +92,14 @@ def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo
     <p>Por favor, revisa el sistema para más detalles.</p>
     """
     # Notificar al usuario que creó el ticket
-    enviar_correo(usuario.correo, asunto, cuerpo)
+    enviar_correo_async(usuario.correo, asunto, cuerpo)
 
     # Notificar al agente anterior (si existe)
     if agente_anterior:
-        enviar_correo(agente_anterior.correo, asunto, cuerpo)
+        enviar_correo_async(agente_anterior.correo, asunto, cuerpo)
 
     # Notificar al nuevo agente
-    enviar_correo(agente_nuevo.correo, asunto, cuerpo)
+    enviar_correo_async(agente_nuevo.correo, asunto, cuerpo)
 
 
 # 🔹 Decorador para proteger rutas según el rol

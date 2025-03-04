@@ -47,7 +47,7 @@ class Usuario(db.Model):
     id_rol = db.Column(Integer, db.ForeignKey('roles.id'), nullable=False)
     id_sucursal = db.Column(Integer, db.ForeignKey('sucursales.id'), nullable=False)
     id_estado = db.Column(Integer, db.ForeignKey('estado.id'), nullable=False, default=1)  # 1 = Activo, 2 = Inactivo
-    creado = db.Column(DateTime, default=datetime.utcnow)
+    creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
 
     # ✅ Relaciones corregidas
     rol_obj = db.relationship('Rol', back_populates='usuarios')
@@ -107,7 +107,7 @@ class TicketComentario(db.Model):
     id_ticket = db.Column(db.Integer, db.ForeignKey('tickets.id'), nullable=False)
     id_usuario = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     comentario = db.Column(Text, nullable=False)
-    creado = db.Column(DateTime, default=datetime.utcnow)
+    creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
 
     # Relaciones con Ticket y Usuario
     ticket = db.relationship('Ticket', backref='comentarios', lazy='joined')
