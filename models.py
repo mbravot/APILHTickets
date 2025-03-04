@@ -112,3 +112,5 @@ class TicketComentario(db.Model):
     # Relaciones con Ticket y Usuario
     ticket = db.relationship('Ticket', backref='comentarios', lazy='joined')
     usuario = db.relationship('Usuario', backref='comentarios', lazy='joined')
+
+    #fin
