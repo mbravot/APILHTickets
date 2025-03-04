@@ -9,7 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 import threading
 
-# Cargar variables de entorno
+# Cargar variables de entorno  
 load_dotenv()
 
 SMTP_USUARIO = os.getenv("SMTP_USUARIO")
