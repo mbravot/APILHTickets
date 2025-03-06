@@ -28,6 +28,8 @@ CHILE_TZ = pytz.timezone('America/Santiago')
 
 # Función de notificación por correo
 def notificar_creacion_ticket(ticket, usuario, agente):
+    agente_nombre = agente.nombre if agente else "Sin asignar"
+    
     asunto = "Nuevo Ticket Creado"
     cuerpo = f"""
     <h1>Nuevo Ticket Creado</h1>
@@ -36,70 +38,114 @@ def notificar_creacion_ticket(ticket, usuario, agente):
         <li><strong>ID:</strong> {ticket.id}</li>
         <li><strong>Título:</strong> {ticket.titulo}</li>
         <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+        <li><strong>Creado por:</strong> {usuario.nombre}</li>
+        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
     </ul>
-    <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>Por favor, revisa el sistema de tickets para más detalles.</p>
+    <p>Departamento de TI La Hornilla.</p>
     """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
-    if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
 
+    # Enviar notificación al creador del ticket
+    enviar_correo_async(usuario.correo, asunto, cuerpo)
+
+    # Enviar notificación al agente asignado (si hay agente)
+    if agente:
+        enviar_correo_async(agente.correo, asunto, cuerpo)
+
+
+# Función para notificar cambio de estado
 def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
+    agente_nombre = agente.nombre if agente else "Sin asignar"
+
     asunto = f"Ticket {ticket.id} Cambió de Estado"
     cuerpo = f"""
     <h1>Cambio de Estado del Ticket</h1>
-    <p>El ticket con ID {ticket.id} ha cambiado su estado a <strong>{nuevo_estado}</strong>.</p>
+    <p>El ticket con los siguientes detalles ha cambiado de estado:</p>
+    <ul>
+        <li><strong>ID:</strong> {ticket.id}</li>
+        <li><strong>Título:</strong> {ticket.titulo}</li>
+        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+        <li><strong>Creado por:</strong> {usuario.nombre}</li>
+        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+        <li><strong>Nuevo Estado:</strong> {nuevo_estado}</li>
+    </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>Departamento de TI La Hornilla.</p>
     """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)
     if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)
 
+# Función para notificar cierre de ticket
 def notificar_cierre_ticket(ticket, usuario, agente):
+    agente_nombre = agente.nombre if agente else "Sin asignar"
+
     asunto = f"Ticket {ticket.id} Cerrado"
     cuerpo = f"""
     <h1>Ticket Cerrado</h1>
-    <p>El ticket con ID {ticket.id} ha sido cerrado.</p>
+    <p>El ticket con los siguientes detalles ha sido cerrado:</p>
+    <ul>
+        <li><strong>ID:</strong> {ticket.id}</li>
+        <li><strong>Título:</strong> {ticket.titulo}</li>
+        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+        <li><strong>Creado por:</strong> {usuario.nombre}</li>
+        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+    </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>Departamento de TI La Hornilla.</p>
     """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)
     if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)
 
+# Función para notificar nuevo comentario
 def notificar_comentario(ticket, usuario, agente, comentario):
+    agente_nombre = agente.nombre if agente else "Sin asignar"
+
     asunto = f"Nuevo Comentario en el Ticket {ticket.id}"
     cuerpo = f"""
-    <h1>Nuevo Comentario</h1>
-    <p>Se ha agregado un nuevo comentario al ticket con ID {ticket.id}:</p>
+    <h1>Nuevo Comentario en Ticket</h1>
+    <p>Se ha agregado un nuevo comentario al ticket con los siguientes detalles:</p>
+    <ul>
+        <li><strong>ID:</strong> {ticket.id}</li>
+        <li><strong>Título:</strong> {ticket.titulo}</li>
+        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+        <li><strong>Creado por:</strong> {usuario.nombre}</li>
+        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+    </ul>
+    <h3>Comentario:</h3>
     <blockquote>{comentario}</blockquote>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>Departamento de TI La Hornilla.</p>
     """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+    enviar_correo_async(usuario.correo, asunto, cuerpo)
     if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)  # Acceder al atributo correo con notación de punto
+        enviar_correo_async(agente.correo, asunto, cuerpo)
 
-
+# Función para notificar reasignación de ticket
 def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo):
+    agente_anterior_nombre = agente_anterior.nombre if agente_anterior else "Ninguno"
+
     asunto = f"Ticket {ticket.id} Reasignado"
     cuerpo = f"""
     <h1>Ticket Reasignado</h1>
-    <p>El ticket con ID {ticket.id} ha sido reasignado.</p>
+    <p>El ticket con los siguientes detalles ha sido reasignado:</p>
     <ul>
+        <li><strong>ID:</strong> {ticket.id}</li>
         <li><strong>Título:</strong> {ticket.titulo}</li>
         <li><strong>Descripción:</strong> {ticket.descripcion}</li>
-        <li><strong>Agente Anterior:</strong> {agente_anterior.nombre if agente_anterior else 'Ninguno'}</li>
-        <li><strong>Agente Nuevo:</strong> {agente_nuevo.nombre}</li>
+        <li><strong>Creado por:</strong> {usuario.nombre}</li>
+        <li><strong>Agente anterior:</strong> {agente_anterior_nombre}</li>
+        <li><strong>Nuevo agente asignado:</strong> {agente_nuevo.nombre}</li>
     </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>Departamento de TI La Hornilla.</p>
     """
-    # Notificar al usuario que creó el ticket
     enviar_correo_async(usuario.correo, asunto, cuerpo)
-
-    # Notificar al agente anterior (si existe)
     if agente_anterior:
         enviar_correo_async(agente_anterior.correo, asunto, cuerpo)
-
-    # Notificar al nuevo agente
     enviar_correo_async(agente_nuevo.correo, asunto, cuerpo)
+
 
 
 # 🔹 Decorador para proteger rutas según el rol  
@@ -256,52 +302,58 @@ def update_ticket(id):
     if usuario.rol_obj.rol != 'Administrador' and ticket.id_usuario != usuario.id:
         return jsonify({'message': 'No tienes permiso para editar este ticket'}), 403
 
-    # Verificar si hay datos JSON para actualizar el título y la descripción
-    if request.is_json:
-        data = request.get_json()
-        ticket.titulo = data.get('titulo', ticket.titulo)
-        ticket.descripcion = data.get('descripcion', ticket.descripcion)
+    data = request.get_json() or {}
 
-    # Manejo de archivo adjunto
+    # Validación mínima
+    if not data:
+        return jsonify({'message': 'Datos JSON no proporcionados'}), 400
+
+    ticket.titulo = data.get('titulo', ticket.titulo)
+    ticket.descripcion = data.get('descripcion', ticket.descripcion)
+
+    # Manejo de archivo opcional (si Flutter manda archivo, lo capturas aquí)
     if 'file' in request.files:
         file = request.files['file']
-
         if file.filename == '':
             return jsonify({'message': 'Nombre de archivo inválido'}), 400
-
         if not allowed_file(file.filename):
             return jsonify({'message': 'Tipo de archivo no permitido'}), 400
 
-        # Asegurar que la carpeta uploads existe
         upload_folder = 'uploads'
         if not os.path.exists(upload_folder):
             os.makedirs(upload_folder)
 
-        # Generar un nombre único para el archivo (evita sobrescribir archivos existentes)
         filename = secure_filename(file.filename)
         file_ext = filename.rsplit('.', 1)[1].lower()
         unique_filename = f"{id}_{current_user_id}_{int(time.time())}.{file_ext}"
         file_path = os.path.join(upload_folder, unique_filename)
-        
-        # Guardar archivo en el servidor
         file.save(file_path)
 
-        # 🔹 Guardar solo el nombre del archivo en la base de datos
         ticket.adjunto = unique_filename
+
+    # ✅ Validación de estado, solo si se envía en el payload
+    nuevo_estado = None
+    if 'id_estado' in data:
+        estado_obj = TicketEstado.query.get(data['id_estado'])
+        if not estado_obj:
+            return jsonify({'error': 'Estado no válido'}), 400
+        ticket.id_estado = data['id_estado']
+        nuevo_estado = estado_obj.nombre
 
     try:
         db.session.commit()
 
-        # Notificar cambio de estado si se actualizó el estado
-        if 'id_estado' in data:
-            nuevo_estado = TicketEstado.query.get(data['id_estado']).nombre
+        # Solo si se cambió el estado, disparamos notificación
+        if nuevo_estado:
             agente = Usuario.query.get(ticket.id_agente) if ticket.id_agente else None
             notificar_cambio_estado(ticket, usuario, agente, nuevo_estado)
+
         return jsonify({'message': 'Ticket actualizado correctamente', 'adjunto': ticket.adjunto}), 200
     except Exception as e:
         db.session.rollback()
         print(f"🔸 Error en update_ticket: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al actualizar el ticket'}), 500
+
 
 
 

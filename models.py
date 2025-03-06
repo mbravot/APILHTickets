@@ -110,7 +110,8 @@ class TicketComentario(db.Model):
     creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
 
     # Relaciones con Ticket y Usuario
-    ticket = db.relationship('Ticket', backref='comentarios', lazy='joined')
+    ticket = db.relationship('Ticket', backref=db.backref('comentarios', cascade='all, delete-orphan', passive_deletes=True))
+
     usuario = db.relationship('Usuario', backref='comentarios', lazy='joined')
 
     #fin  
