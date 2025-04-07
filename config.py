@@ -1,6 +1,6 @@
 class Config:
     SECRET_KEY = 'Inicio01*'  # Cambia esto por una clave segura
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://agrico24_mbravo:Inicio01*@186.64.116.150/agrico24_flutter_ticket'
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://lahornilla_mbravo:Adm1n2021!+@200.73.20.99:35026/lahornilla_ticket'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = 'Inicio01*'  # Cambia esto por una clave segura
     SQLALCHEMY_POOL_RECYCLE = 280  # Evita la desconexión por inactividad
