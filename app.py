@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from flask import Flask, request
 from config import Config
 from models import db
@@ -9,7 +10,7 @@ import os
 app = Flask(__name__)
 
 # Configuración base de datos
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://agrico24_mbravo:Inicio01*@186.64.116.150/agrico24_flutter_ticket'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://lahornilla_mbravo:Adm1n2021!+@200.73.20.99:35026/lahornilla_ticket'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Otras configuraciones
@@ -29,29 +30,35 @@ if not os.path.exists(UPLOAD_FOLDER):
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# CORS
-CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],"allow_headers": ["Content-Type", "Authorization"]}})
+# Configuración CORS más permisiva
+CORS(app, 
+     resources={r"/*": {
+         "origins": ["*"],
+         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+         "expose_headers": ["Content-Type", "Authorization"],
+         "supports_credentials": True
+     }})
 
 # Registrar blueprints
 app.register_blueprint(api, url_prefix='/api')
 app.register_blueprint(auth, url_prefix='/api/auth')
 
-# Debug para ver solicitudes
 @app.before_request
-def handle_options():
-    print(f"🔹 Recibida petición: {request.method} {request.path}")
-    if request.method == 'OPTIONS':
+def handle_preflight():
+    if request.method == "OPTIONS":
         response = app.make_default_options_response()
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Access-Control-Allow-Origin"
+        response.headers["Access-Control-Max-Age"] = "3600"
         return response
 
 @app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Access-Control-Allow-Origin"
     return response
 
 # Crear tablas al inicio
@@ -61,8 +68,9 @@ with app.app_context():
 # Prueba para la raíz /
 @app.route('/')
 def home():
-    return "✅ API Flask funcionando correctamente en Azure"
+    return "✅ API Flask funcionando correctamente"
 
-# Ejecutar app
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    # Obtener puerto del entorno o usar 8080 por defecto
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
