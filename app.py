@@ -6,12 +6,12 @@ from flask_jwt_extended import JWTManager
 from routes import api, auth
 from flask_cors import CORS
 import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 app = Flask(__name__)
-
-# Configuración base de datos
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://lahornilla_mbravo:Adm1n2021!+@200.73.20.99:35026/lahornilla_ticket'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Otras configuraciones
 app.config.from_object(Config)
@@ -72,5 +72,5 @@ def home():
 
 if __name__ == '__main__':
     # Obtener puerto del entorno o usar 8080 por defecto
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    #port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=8080)
