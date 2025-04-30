@@ -14,10 +14,6 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
-# Configuración base de datos con valor por defecto
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://lahornilla_mbravo:Adm1n2021!+@200.73.20.99:35026/lahornilla_ticket')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
 # Otras configuraciones
 app.config.from_object(Config)
 
