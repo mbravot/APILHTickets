@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno al inicio
+load_dotenv()
+
 from flask import Flask, request
 from config import Config
 from models import db
 from flask_jwt_extended import JWTManager
 from routes import api, auth
 from flask_cors import CORS
-import os
-from dotenv import load_dotenv
-
-# Cargar variables de entorno
-load_dotenv()
 
 app = Flask(__name__)
+
+# Configuración base de datos con valor por defecto
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://lahornilla_mbravo:Adm1n2021!+@200.73.20.99:35026/lahornilla_ticket')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Otras configuraciones
 app.config.from_object(Config)
