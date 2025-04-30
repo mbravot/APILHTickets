@@ -16,10 +16,11 @@ SMTP_USUARIO = os.getenv("SMTP_USUARIO")
 SMTP_CLAVE = os.getenv("SMTP_CLAVE")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_DISPLAY_NAME = os.getenv("SMTP_DISPLAY_NAME", "Sistema de Tickets")
 
 def enviar_correo(destinatario, asunto, cuerpo):
     mensaje = MIMEMultipart()
-    mensaje['From'] = SMTP_USUARIO
+    mensaje['From'] = f"{SMTP_DISPLAY_NAME} <{SMTP_USUARIO}>"
     mensaje['To'] = destinatario
     mensaje['Subject'] = asunto
     mensaje.attach(MIMEText(cuerpo, 'html'))
