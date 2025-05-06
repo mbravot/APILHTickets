@@ -42,6 +42,7 @@ def notificar_creacion_ticket(ticket, usuario, agente):
         <li><strong>Agente asignado:</strong> {agente_nombre}</li>
     </ul>
     <p>Por favor, revisa el sistema de tickets para más detalles.</p>
+    <p>https://tickets.lahornilla.cl/</p>
     <p>Departamento de TI La Hornilla.</p>
     """
 
@@ -70,6 +71,7 @@ def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
         <li><strong>Nuevo Estado:</strong> {nuevo_estado}</li>
     </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>https://tickets.lahornilla.cl/</p>
     <p>Departamento de TI La Hornilla.</p>
     """
     enviar_correo_async(usuario.correo, asunto, cuerpo)
@@ -92,6 +94,7 @@ def notificar_cierre_ticket(ticket, usuario, agente):
         <li><strong>Agente asignado:</strong> {agente_nombre}</li>
     </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>https://tickets.lahornilla.cl/</p>
     <p>Departamento de TI La Hornilla.</p>
     """
     enviar_correo_async(usuario.correo, asunto, cuerpo)
@@ -116,6 +119,7 @@ def notificar_comentario(ticket, usuario, agente, comentario):
     <h3>Comentario:</h3>
     <blockquote>{comentario}</blockquote>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>https://tickets.lahornilla.cl/</p>
     <p>Departamento de TI La Hornilla.</p>
     """
     enviar_correo_async(usuario.correo, asunto, cuerpo)
@@ -139,6 +143,7 @@ def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo
         <li><strong>Nuevo agente asignado:</strong> {agente_nuevo.nombre}</li>
     </ul>
     <p>Por favor, revisa el sistema para más detalles.</p>
+    <p>https://tickets.lahornilla.cl/</p>
     <p>Departamento de TI La Hornilla.</p>
     """
     enviar_correo_async(usuario.correo, asunto, cuerpo)
