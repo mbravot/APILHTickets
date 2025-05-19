@@ -1,13 +1,11 @@
-import os
 import sys
-import site
+import os
 
-# Añadir el directorio de la aplicación al path
-INTERP = os.path.expanduser("/var/www/virtualenv/ticket_flask_api/3.11/bin/python")
+# Agregar el directorio actual al path de Python
+INTERP = os.path.expanduser("/home/lahornilla/virtualenv/ticket_flask_api/3.13/bin/python")
 if sys.executable != INTERP:
     os.execl(INTERP, INTERP, *sys.argv)
 
-# Añadir el directorio de la aplicación al path
 sys.path.append(os.getcwd())
 
 # Cargar variables de entorno

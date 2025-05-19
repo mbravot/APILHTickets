@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 from flask import Blueprint, request, jsonify
 from models import Rol, db, Ticket, Usuario, TicketEstado, TicketPrioridad, Departamento, TicketComentario, Sucursal, agente_departamento
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
@@ -234,7 +235,29 @@ def get_tickets():
         print(f"🔸 Error en get_tickets: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener los tickets'}), 500
 
+@api.route('/tickets/<int:id>', methods=['GET'])
+@jwt_required()
+def get_ticket(id):
+    ticket = Ticket.query.get(id)
+    if not ticket:
+        return jsonify({'message': 'Ticket no encontrado'}), 404
 
+    ticket_data = {
+        "id": ticket.id,
+        "titulo": ticket.titulo,
+        "descripcion": ticket.descripcion,
+        "id_usuario": ticket.id_usuario,
+        "id_agente": ticket.id_agente,
+        "usuario": ticket.usuario.nombre if ticket.usuario else None,
+        "agente": ticket.agente.nombre if ticket.agente else None,
+        "estado": ticket.estado.nombre if ticket.estado else None,
+        "prioridad": ticket.prioridad.nombre if ticket.prioridad else None,
+        "departamento": ticket.departamento.nombre if ticket.departamento else None,
+        "id_departamento": ticket.id_departamento,
+        "creado": ticket.creado.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.creado else None,
+        "adjunto": ticket.adjunto
+    }
+    return jsonify(ticket_data), 200
 
 # Ruta para crear un nuevo ticket
 @api.route('/tickets', methods=['POST'])
@@ -736,26 +759,68 @@ def upload_file(id):
     if not os.path.exists(upload_folder):
         os.makedirs(upload_folder)
 
-    # Generar un nombre único para el archivo
+    # Obtener la lista actual de archivos adjuntos
+    archivos_actuales = ticket.adjunto.split(',') if ticket.adjunto else []
+
+    # Calcular el siguiente número de adjunto
+    siguiente_numero = len(archivos_actuales) + 1
+
+    # Obtener la extensión del archivo
     filename = secure_filename(file.filename)
     file_ext = filename.rsplit('.', 1)[1].lower()
-    unique_filename = f"ticket_{id}_{int(time.time())}.{file_ext}"
+
+    # Generar el nombre secuencial
+    unique_filename = f"adjunto_{siguiente_numero}.{file_ext}"
     file_path = os.path.join(upload_folder, unique_filename)
-    
+
     # Guardar el archivo en el servidor
     file.save(file_path)
 
-    # 🔹 Guardar el nombre del archivo en la base de datos
+    # Guardar el nombre del archivo en la base de datos
     try:
-        ticket.adjunto = unique_filename  # Guardamos solo el nombre, no la ruta completa
+        # Agregar el nuevo archivo a la lista
+        archivos_actuales.append(unique_filename)
+        # Unir la lista con comas y guardar
+        ticket.adjunto = ','.join(archivos_actuales)
+        
         db.session.commit()
         print(f"✅ Archivo {unique_filename} guardado en la BD para el ticket {id}")
-        return jsonify({'message': 'Archivo subido correctamente', 'adjunto': unique_filename}), 200
+        return jsonify({'message': 'Archivo subido correctamente', 'adjunto': ticket.adjunto}), 200
     except Exception as e:
         db.session.rollback()
         print(f"🔸 Error al guardar el adjunto en la BD: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al guardar el archivo en la base de datos'}), 500
-    
+
+
+@api.route('/tickets/<int:id>/adjunto/<nombre_adjunto>', methods=['DELETE'])
+@jwt_required()
+def eliminar_adjunto(id, nombre_adjunto):
+    ticket = Ticket.query.get(id)
+    if not ticket:
+        return jsonify({'message': 'Ticket no encontrado'}), 404
+
+    # Lista de adjuntos actual
+    archivos_actuales = ticket.adjunto.split(',') if ticket.adjunto else []
+
+    if nombre_adjunto not in archivos_actuales:
+        return jsonify({'message': 'Adjunto no encontrado en este ticket'}), 404
+
+    # Eliminar el archivo físico
+    upload_folder = 'uploads'
+    file_path = os.path.join(upload_folder, nombre_adjunto)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    # Quitar el adjunto de la lista y actualizar la base de datos
+    archivos_actuales.remove(nombre_adjunto)
+    ticket.adjunto = ','.join(archivos_actuales)
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Adjunto eliminado correctamente', 'adjunto': ticket.adjunto}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar adjunto: {str(e)}'}), 500
+
 
     # Ruta para cerrar ticket
 @api.route('/tickets/<int:id>/cerrar', methods=['PUT'])

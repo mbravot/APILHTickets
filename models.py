@@ -90,7 +90,7 @@ class Ticket(db.Model):
     titulo = db.Column(db.String(150), nullable=False)
     descripcion = db.Column(Text, nullable=False)
     creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
-    actualizado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ), onupdate=datetime.utcnow)
+    actualizado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ), onupdate=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
     adjunto = db.Column(db.String(255), nullable=True) 
 
     # Relaciones con otros modelos
