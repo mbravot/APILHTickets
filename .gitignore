@@ -1,19 +1,26 @@
-# Archivos de entorno
-.env
-
-# Archivos de Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Entornos virtuales
+# Virtual Environment
 venv/
+env/
 ENV/
 
-# Archivos de IDE
+# Uploads
+uploads/
+
+# Environment variables
+.env
+
+# IDE
 .vscode/
 .idea/
 
-# Archivos de sistema
-.DS_Store
-Thumbs.db
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite3

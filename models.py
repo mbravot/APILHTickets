@@ -1,53 +1,65 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import pytz
-from sqlalchemy import Table, Column, Integer, String, ForeignKey, Text, DateTime
+from sqlalchemy import Table, Column, Integer, String, ForeignKey, Text, DateTime, Date
 from sqlalchemy.orm import relationship
 
 db = SQLAlchemy()
 
 CHILE_TZ = pytz.timezone('America/Santiago')  
 
+# 🔹 Modelo Colaborador
+class Colaborador(db.Model):
+    __tablename__ = 'general_dim_colaborador'
+    id = db.Column(Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    apellido_paterno = db.Column(db.String(45), nullable=False)
+    apellido_materno = db.Column(db.String(45), nullable=True)
+    usuarios = db.relationship('Usuario', backref='colaborador_obj')
+
 # 🔹 Tabla intermedia para la relación muchos a muchos entre Agentes y Departamentos
-agente_departamento = Table(
-    'agente_departamento',
+ticket_pivot_departamento_agente = Table(
+    'ticket_pivot_departamento_agente',
     db.metadata,
-    Column('id_agente', Integer, ForeignKey('usuarios.id'), primary_key=True),
-    Column('id_departamento', Integer, ForeignKey('departamento.id'), primary_key=True)
+    Column('id_usuario', String(45), ForeignKey('general_dim_usuario.id'), primary_key=True),
+    Column('id_departamento', Integer, ForeignKey('general_dim_departamento.id'), primary_key=True)
 )
 
 # 🔹 Modelo Estado
 class Estado(db.Model):
-    __tablename__ = 'estado'
+    __tablename__ = 'general_dim_estado'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), nullable=False)
     usuarios = db.relationship('Usuario', back_populates='estado_obj')
 
 # 🔹 Modelo Sucursal
 class Sucursal(db.Model):
-    __tablename__ = 'sucursales'
+    __tablename__ = 'general_dim_sucursal'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
+    ubicacion = db.Column(db.String(255), nullable=True)
+    id_empresa = db.Column(db.Integer, nullable=True)
     usuarios = db.relationship('Usuario', back_populates='sucursal_obj')
 
 # 🔹 Modelo Rol
 class Rol(db.Model):
-    __tablename__ = 'roles'
+    __tablename__ = 'ticket_dim_rol'
     id = db.Column(db.Integer, primary_key=True)
-    rol = db.Column(db.String(45), nullable=False)
+    nombre = db.Column(db.String(45), nullable=False)
     usuarios = db.relationship('Usuario', back_populates='rol_obj', lazy='dynamic')
 
 # 🔹 Modelo Usuario
 class Usuario(db.Model):
-    __tablename__ = 'usuarios'
-    id = db.Column(Integer, primary_key=True)
-    nombre = db.Column(db.String(100), nullable=False)
-    correo = db.Column(db.String(100), unique=True, nullable=False)
+    __tablename__ = 'general_dim_usuario'
+    id = db.Column(String(45), primary_key=True)
+    id_colaborador = db.Column(Integer, ForeignKey('general_dim_colaborador.id'), nullable=True)
+    id_sucursalactiva = db.Column(Integer, ForeignKey('general_dim_sucursal.id'), nullable=False)
+    usuario = db.Column(db.String(45), nullable=False)
     clave = db.Column(db.String(255), nullable=False)
-    id_rol = db.Column(Integer, db.ForeignKey('roles.id'), nullable=False)
-    id_sucursal = db.Column(Integer, db.ForeignKey('sucursales.id'), nullable=False)
-    id_estado = db.Column(Integer, db.ForeignKey('estado.id'), nullable=False, default=1)  # 1 = Activo, 2 = Inactivo
-    creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
+    fecha_creacion = db.Column(Date, nullable=False)
+    id_estado = db.Column(Integer, ForeignKey('general_dim_estado.id'), nullable=False)
+    correo = db.Column(db.String(100), nullable=False)
+    id_rol = db.Column(Integer, ForeignKey('ticket_dim_rol.id'), nullable=False)
 
     # ✅ Relaciones corregidas
     rol_obj = db.relationship('Rol', back_populates='usuarios')
@@ -55,42 +67,43 @@ class Usuario(db.Model):
     estado_obj = db.relationship('Estado', back_populates='usuarios')  
 
     # ✅ Relación con Departamentos (Muchos a Muchos)
-    departamentos = relationship("Departamento", secondary=agente_departamento, back_populates="agentes")
+    departamentos = relationship("Departamento", secondary=ticket_pivot_departamento_agente, back_populates="agentes")
 
 # 🔹 Modelo TicketEstado
 class TicketEstado(db.Model):
-    __tablename__ = 'ticket_estado'
+    __tablename__ = 'ticket_dim_estado'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), nullable=False)
 
 # 🔹 Modelo TicketPrioridad
 class TicketPrioridad(db.Model):
-    __tablename__ = 'ticket_prioridad'
+    __tablename__ = 'ticket_dim_prioridad'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), nullable=False)
 
 # 🔹 Modelo Departamento
 class Departamento(db.Model):
-    __tablename__ = 'departamento'
+    __tablename__ = 'general_dim_departamento'
     id = db.Column(Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
+    id_empresa = db.Column(Integer, nullable=False, default=1)
 
     # ✅ Relación con Agentes (Muchos a Muchos)
-    agentes = relationship("Usuario", secondary=agente_departamento, back_populates="departamentos")
+    agentes = relationship("Usuario", secondary=ticket_pivot_departamento_agente, back_populates="departamentos")
 
 # 🔹 Modelo Ticket
 class Ticket(db.Model):
-    __tablename__ = 'tickets'
-    id = db.Column(Integer, primary_key=True)
-    id_usuario = db.Column(Integer, db.ForeignKey('usuarios.id'), nullable=False)  # Usuario que creó el ticket
-    id_agente = db.Column(Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Agente asignado al ticket
-    id_estado = db.Column(Integer, db.ForeignKey('ticket_estado.id'), nullable=False)
-    id_prioridad = db.Column(Integer, db.ForeignKey('ticket_prioridad.id'), nullable=False)
-    id_departamento = db.Column(Integer, db.ForeignKey('departamento.id'), nullable=False)
+    __tablename__ = 'ticket_fact_registro'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_usuario = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=False)  # Usuario que creó el ticket
+    id_agente = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=True)  # Agente asignado al ticket
+    id_estado = db.Column(Integer, ForeignKey('ticket_dim_estado.id'), nullable=False)
+    id_prioridad = db.Column(Integer, ForeignKey('ticket_dim_prioridad.id'), nullable=False)
+    id_departamento = db.Column(Integer, ForeignKey('general_dim_departamento.id'), nullable=False)
     titulo = db.Column(db.String(150), nullable=False)
     descripcion = db.Column(Text, nullable=False)
-    creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
-    actualizado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ), onupdate=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
+    fecha_creacion = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
+    fecha_cierre = db.Column(DateTime, nullable=True)
     adjunto = db.Column(db.String(255), nullable=True) 
 
     # Relaciones con otros modelos
@@ -102,16 +115,15 @@ class Ticket(db.Model):
 
 # 🔹 Modelo TicketComentario
 class TicketComentario(db.Model):
-    __tablename__ = 'ticket_comentario'
-    id = db.Column(db.Integer, primary_key=True)
-    id_ticket = db.Column(db.Integer, db.ForeignKey('tickets.id'), nullable=False)
-    id_usuario = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    __tablename__ = 'ticket_pivot_comentario_registro'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_ticket = db.Column(db.Integer, ForeignKey('ticket_fact_registro.id', ondelete='CASCADE'), nullable=False)
+    id_usuario = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=False)
     comentario = db.Column(Text, nullable=False)
-    creado = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
+    timestamp = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
 
     # Relaciones con Ticket y Usuario
     ticket = db.relationship('Ticket', backref=db.backref('comentarios', cascade='all, delete-orphan', passive_deletes=True))
-
     usuario = db.relationship('Usuario', backref='comentarios', lazy='joined')
 
     #fin  
