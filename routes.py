@@ -2,7 +2,7 @@ import os
 import time
 import uuid
 from flask import Blueprint, request, jsonify
-from models import Rol, db, Ticket, Usuario, TicketEstado, TicketPrioridad, Departamento, TicketComentario, Sucursal, ticket_pivot_departamento_agente, Colaborador
+from models import Rol, db, Ticket, Usuario, TicketEstado, TicketPrioridad, Departamento, TicketComentario, Sucursal, ticket_pivot_departamento_agente, Colaborador, Categoria
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -16,7 +16,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
-from utils import enviar_correo_async
+from utils import enviar_correo_async, enviar_correo
 import bcrypt
 import hashlib
 from datetime import datetime
@@ -32,128 +32,164 @@ CHILE_TZ = pytz.timezone('America/Santiago')
 
 # Función de notificación por correo
 def notificar_creacion_ticket(ticket, usuario, agente):
-    agente_nombre = agente.usuario if agente else "Sin asignar"
-    
-    asunto = "Nuevo Ticket Creado"
-    cuerpo = f"""
-    <h1>Nuevo Ticket Creado</h1>
-    <p>Se ha creado un nuevo ticket con los siguientes detalles:</p>
-    <ul>
-        <li><strong>ID:</strong> {ticket.id}</li>
-        <li><strong>Título:</strong> {ticket.titulo}</li>
-        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
-        <li><strong>Creado por:</strong> {usuario.usuario}</li>
-        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
-    </ul>
-    <p>Por favor, revisa el sistema de tickets para más detalles.</p>
-    <p>https://tickets.lahornilla.cl/</p>
-    <p>Departamento de TI La Hornilla.</p>
-    """
+    try:
+        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
+        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+        sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
+        
+        asunto = "Nuevo Ticket Creado"
+        cuerpo = f"""
+        <h1>Nuevo Ticket Creado</h1>
+        <p>Se ha creado un nuevo ticket con los siguientes detalles:</p>
+        <ul>
+            <li><strong>ID:</strong> {ticket.id}</li>
+            <li><strong>Título:</strong> {ticket.titulo}</li>
+            <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+            <li><strong>Creado por:</strong> {usuario_nombre}</li>
+            <li><strong>Sucursal:</strong> {sucursal_nombre}</li>
+            <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+        </ul>
+        <p>Por favor, revisa el sistema de tickets para más detalles.</p>
+        <p>https://tickets.lahornilla.cl/</p>
+        <p>Departamento de TI La Hornilla.</p>
+        """
 
-    # Enviar notificación al creador del ticket
-    enviar_correo_async(usuario.correo, asunto, cuerpo)
+        # Enviar notificación al creador del ticket
+        enviar_correo_async(usuario.correo, asunto, cuerpo)
 
-    # Enviar notificación al agente asignado (si hay agente)
-    if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)
+        # Enviar notificación al agente asignado (si hay agente)
+        if agente:
+            enviar_correo_async(agente.correo, asunto, cuerpo)
+    except Exception as e:
+        print(f"Error en notificar_creacion_ticket: {str(e)}")
 
 
 # Función para notificar cambio de estado
 def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
-    agente_nombre = agente.usuario if agente else "Sin asignar"
+    try:
+        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
+        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+        sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
-    asunto = f"Ticket {ticket.id} Cambió de Estado"
-    cuerpo = f"""
-    <h1>Cambio de Estado del Ticket</h1>
-    <p>El ticket con los siguientes detalles ha cambiado de estado:</p>
-    <ul>
-        <li><strong>ID:</strong> {ticket.id}</li>
-        <li><strong>Título:</strong> {ticket.titulo}</li>
-        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
-        <li><strong>Creado por:</strong> {usuario.usuario}</li>
-        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
-        <li><strong>Nuevo Estado:</strong> {nuevo_estado}</li>
-    </ul>
-    <p>Por favor, revisa el sistema para más detalles.</p>
-    <p>https://tickets.lahornilla.cl/</p>
-    <p>Departamento de TI La Hornilla.</p>
-    """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)
-    if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)
+        asunto = f"Ticket {ticket.id} Cambió de Estado"
+        cuerpo = f"""
+        <h1>Cambio de Estado del Ticket</h1>
+        <p>El ticket con los siguientes detalles ha cambiado de estado:</p>
+        <ul>
+            <li><strong>ID:</strong> {ticket.id}</li>
+            <li><strong>Título:</strong> {ticket.titulo}</li>
+            <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+            <li><strong>Creado por:</strong> {usuario_nombre}</li>
+            <li><strong>Sucursal:</strong> {sucursal_nombre}</li>
+            <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+            <li><strong>Nuevo Estado:</strong> {nuevo_estado}</li>
+        </ul>
+        <p>Por favor, revisa el sistema para más detalles.</p>
+        <p>https://tickets.lahornilla.cl/</p>
+        <p>Departamento de TI La Hornilla.</p>
+        """
+        enviar_correo_async(usuario.correo, asunto, cuerpo)
+        if agente:
+            enviar_correo_async(agente.correo, asunto, cuerpo)
+    except Exception as e:
+        print(f"Error en notificar_cambio_estado: {str(e)}")
 
 # Función para notificar cierre de ticket
 def notificar_cierre_ticket(ticket, usuario, agente):
-    agente_nombre = agente.usuario if agente else "Sin asignar"
+    try:
+        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
+        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+        sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
-    asunto = f"Ticket {ticket.id} Cerrado"
-    cuerpo = f"""
-    <h1>Ticket Cerrado</h1>
-    <p>El ticket con los siguientes detalles ha sido cerrado:</p>
-    <ul>
-        <li><strong>ID:</strong> {ticket.id}</li>
-        <li><strong>Título:</strong> {ticket.titulo}</li>
-        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
-        <li><strong>Creado por:</strong> {usuario.usuario}</li>
-        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
-    </ul>
-    <p>Por favor, revisa el sistema para más detalles.</p>
-    <p>https://tickets.lahornilla.cl/</p>
-    <p>Departamento de TI La Hornilla.</p>
-    """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)
-    if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)
+        asunto = f"Ticket {ticket.id} Cerrado"
+        cuerpo = f"""
+        <h1>Ticket Cerrado</h1>
+        <p>El ticket con los siguientes detalles ha sido cerrado:</p>
+        <ul>
+            <li><strong>ID:</strong> {ticket.id}</li>
+            <li><strong>Título:</strong> {ticket.titulo}</li>
+            <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+            <li><strong>Creado por:</strong> {usuario_nombre}</li>
+            <li><strong>Sucursal:</strong> {sucursal_nombre}</li>
+            <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+        </ul>
+        <p>Por favor, revisa el sistema para más detalles.</p>
+        <p>https://tickets.lahornilla.cl/</p>
+        <p>Departamento de TI La Hornilla.</p>
+        """
+        enviar_correo_async(usuario.correo, asunto, cuerpo)
+        if agente:
+            enviar_correo_async(agente.correo, asunto, cuerpo)
+    except Exception as e:
+        print(f"Error en notificar_cierre_ticket: {str(e)}")
 
 # Función para notificar nuevo comentario
 def notificar_comentario(ticket, usuario, agente, comentario):
-    agente_nombre = agente.usuario if agente else "Sin asignar"
+    try:
+        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
+        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+        sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
-    asunto = f"Nuevo Comentario en el Ticket {ticket.id}"
-    cuerpo = f"""
-    <h1>Nuevo Comentario en Ticket</h1>
-    <p>Se ha agregado un nuevo comentario al ticket con los siguientes detalles:</p>
-    <ul>
-        <li><strong>ID:</strong> {ticket.id}</li>
-        <li><strong>Título:</strong> {ticket.titulo}</li>
-        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
-        <li><strong>Creado por:</strong> {usuario.usuario}</li>
-        <li><strong>Agente asignado:</strong> {agente_nombre}</li>
-    </ul>
-    <h3>Comentario:</h3>
-    <blockquote>{comentario}</blockquote>
-    <p>Por favor, revisa el sistema para más detalles.</p>
-    <p>https://tickets.lahornilla.cl/</p>
-    <p>Departamento de TI La Hornilla.</p>
-    """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)
-    if agente:
-        enviar_correo_async(agente.correo, asunto, cuerpo)
+        asunto = f"Nuevo Comentario en el Ticket {ticket.id}"
+        cuerpo = f"""
+        <h1>Nuevo Comentario en Ticket</h1>
+        <p>Se ha agregado un nuevo comentario al ticket con los siguientes detalles:</p>
+        <ul>
+            <li><strong>ID:</strong> {ticket.id}</li>
+            <li><strong>Título:</strong> {ticket.titulo}</li>
+            <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+            <li><strong>Creado por:</strong> {usuario_nombre}</li>
+            <li><strong>Sucursal:</strong> {sucursal_nombre}</li>
+            <li><strong>Agente asignado:</strong> {agente_nombre}</li>
+        </ul>
+        <h3>Comentario:</h3>
+        <blockquote>{comentario}</blockquote>
+        <p>Por favor, revisa el sistema para más detalles.</p>
+        <p>https://tickets.lahornilla.cl/</p>
+        <p>Departamento de TI La Hornilla.</p>
+        """
+        enviar_correo_async(usuario.correo, asunto, cuerpo)
+        if agente:
+            enviar_correo_async(agente.correo, asunto, cuerpo)
+    except Exception as e:
+        print(f"Error en notificar_comentario: {str(e)}")
 
 # Función para notificar reasignación de ticket
 def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo):
-    agente_anterior_nombre = agente_anterior.usuario if agente_anterior else "Ninguno"
+    try:
+        agente_anterior_nombre = agente_anterior.colaborador_obj.nombre if agente_anterior and agente_anterior.colaborador_obj else agente_anterior.correo if agente_anterior else "Ninguno"
+        agente_nuevo_nombre = agente_nuevo.colaborador_obj.nombre if agente_nuevo.colaborador_obj else agente_nuevo.correo
+        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+        sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
-    asunto = f"Ticket {ticket.id} Reasignado"
-    cuerpo = f"""
-    <h1>Ticket Reasignado</h1>
-    <p>El ticket con los siguientes detalles ha sido reasignado:</p>
-    <ul>
-        <li><strong>ID:</strong> {ticket.id}</li>
-        <li><strong>Título:</strong> {ticket.titulo}</li>
-        <li><strong>Descripción:</strong> {ticket.descripcion}</li>
-        <li><strong>Creado por:</strong> {usuario.usuario}</li>
-        <li><strong>Agente anterior:</strong> {agente_anterior_nombre}</li>
-        <li><strong>Nuevo agente asignado:</strong> {agente_nuevo.usuario}</li>
-    </ul>
-    <p>Por favor, revisa el sistema para más detalles.</p>
-    <p>https://tickets.lahornilla.cl/</p>
-    <p>Departamento de TI La Hornilla.</p>
-    """
-    enviar_correo_async(usuario.correo, asunto, cuerpo)
-    if agente_anterior:
-        enviar_correo_async(agente_anterior.correo, asunto, cuerpo)
-    enviar_correo_async(agente_nuevo.correo, asunto, cuerpo)
+        asunto = f"Ticket {ticket.id} Reasignado"
+        cuerpo = f"""
+        <h1>Ticket Reasignado</h1>
+        <p>El ticket con los siguientes detalles ha sido reasignado:</p>
+        <ul>
+            <li><strong>ID:</strong> {ticket.id}</li>
+            <li><strong>Título:</strong> {ticket.titulo}</li>
+            <li><strong>Descripción:</strong> {ticket.descripcion}</li>
+            <li><strong>Creado por:</strong> {usuario_nombre}</li>
+            <li><strong>Sucursal:</strong> {sucursal_nombre}</li>
+            <li><strong>Agente anterior:</strong> {agente_anterior_nombre}</li>
+            <li><strong>Nuevo agente asignado:</strong> {agente_nuevo_nombre}</li>
+        </ul>
+        <p>Por favor, revisa el sistema para más detalles.</p>
+        <p>https://tickets.lahornilla.cl/</p>
+        <p>Departamento de TI La Hornilla.</p>
+        """
+        enviar_correo_async(usuario.correo, asunto, cuerpo)
+        if agente_anterior:
+            enviar_correo_async(agente_anterior.correo, asunto, cuerpo)
+        enviar_correo_async(agente_nuevo.correo, asunto, cuerpo)
+    except Exception as e:
+        print(f"Error en notificar_reasignacion_ticket: {str(e)}")
 
 
 
@@ -206,41 +242,59 @@ def get_tickets():
 
         print(f"🔹 Usuario autenticado: {usuario.usuario} ({usuario.rol_obj.nombre})")
 
+        # Obtener tickets según el rol del usuario
         if usuario.rol_obj.nombre == "ADMINISTRADOR":
+            # Administradores ven todos los tickets
             tickets = Ticket.query.order_by(Ticket.fecha_creacion.desc()).all()
         elif usuario.rol_obj.nombre == "AGENTE":
+            # Obtener los departamentos asignados al agente
+            departamentos_ids = [d.id for d in usuario.departamentos]
+            print(f"Departamentos del agente: {departamentos_ids}")
+            
+            # Agentes ven tickets de sus departamentos asignados
             tickets = Ticket.query.filter(
-                (Ticket.id_usuario == current_user_id) |
-                (Ticket.id_agente == current_user_id)
+                Ticket.id_departamento.in_(departamentos_ids)
             ).order_by(Ticket.fecha_creacion.desc()).all()
+            
+            print(f"Tickets encontrados para el agente: {len(tickets)}")
         else:  # Usuario normal
+            # Usuarios normales ven sus propios tickets
             tickets = Ticket.query.filter_by(id_usuario=current_user_id).order_by(Ticket.fecha_creacion.desc()).all()
 
-        # ✅ Ahora agregamos el campo `adjunto`
-        ticket_list = [{
-            "id": ticket.id,
-            "titulo": ticket.titulo,
-            "descripcion": ticket.descripcion,
-            "id_usuario": ticket.id_usuario,
-            "id_agente": ticket.id_agente,
-            "usuario": (
-                ticket.usuario.colaborador_obj.nombre
-                if ticket.usuario and ticket.usuario.colaborador_obj
-                else ticket.usuario.usuario if ticket.usuario else "Sin usuario"
-            ),
-            "agente": (
-                ticket.agente.colaborador_obj.nombre
-                if ticket.agente and ticket.agente.colaborador_obj
-                else ticket.agente.usuario if ticket.agente else "Sin asignar"
-            ),
-            "estado": ticket.estado.nombre,
-            "prioridad": ticket.prioridad.nombre,
-            "departamento": ticket.departamento.nombre,
-            "id_departamento": ticket.id_departamento,  # ✅ 🔹 Agrega esta línea
-            "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
-            "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
-            "adjunto": ticket.adjunto  # ✅ Incluir el adjunto en la respuesta
-        } for ticket in tickets]
+        ticket_list = []
+        for ticket in tickets:
+            # DEBUG: Log para depuración de sucursal
+            print(f"Ticket ID: {ticket.id} | id_sucursal: {ticket.id_sucursal}")
+            sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+            print(f"Sucursal encontrada: {sucursal_obj}")
+            nombre_sucursal = sucursal_obj.nombre if sucursal_obj else "No asignada"
+            ticket_list.append({
+                "id": ticket.id,
+                "titulo": ticket.titulo,
+                "descripcion": ticket.descripcion,
+                "id_usuario": ticket.id_usuario,
+                "id_agente": ticket.id_agente,
+                "usuario": (
+                    ticket.usuario.colaborador_obj.nombre
+                    if ticket.usuario and ticket.usuario.colaborador_obj
+                    else ticket.usuario.usuario if ticket.usuario else "Sin usuario"
+                ),
+                "agente": (
+                    ticket.agente.colaborador_obj.nombre
+                    if ticket.agente and ticket.agente.colaborador_obj
+                    else ticket.agente.usuario if ticket.agente else "Sin asignar"
+                ),
+                "estado": ticket.estado.nombre,
+                "prioridad": ticket.prioridad.nombre,
+                "departamento": ticket.departamento.nombre if ticket.departamento else None,
+                "id_departamento": ticket.id_departamento,
+                "sucursal": nombre_sucursal,
+                "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
+                "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
+                "adjunto": ticket.adjunto,
+                "id_prioridad": ticket.id_prioridad,
+                "id_estado": ticket.id_estado
+            })
 
         return jsonify(ticket_list), 200
 
@@ -273,6 +327,11 @@ def get_ticket(id):
         for c in comentarios
     ]
 
+    # DEBUG: Log para depuración de sucursal en detalle
+    print(f"Ticket ID: {ticket.id} | id_sucursal: {ticket.id_sucursal}")
+    sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+    print(f"Sucursal encontrada: {sucursal_obj}")
+    nombre_sucursal = sucursal_obj.nombre if sucursal_obj else "No asignada"
     ticket_data = {
         "id": ticket.id,
         "titulo": ticket.titulo,
@@ -293,10 +352,13 @@ def get_ticket(id):
         "prioridad": ticket.prioridad.nombre if ticket.prioridad else None,
         "departamento": ticket.departamento.nombre if ticket.departamento else None,
         "id_departamento": ticket.id_departamento,
+        "sucursal": nombre_sucursal,
         "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
         "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
         "adjunto": ticket.adjunto,
-        "comentarios": comentarios_list  # <-- Agregar aquí los comentarios
+        "comentarios": comentarios_list,
+        "id_prioridad": ticket.id_prioridad,
+        "id_estado": ticket.id_estado
     }
     return jsonify(ticket_data), 200
 
@@ -308,29 +370,41 @@ def create_ticket():
     try:
         data = request.get_json()
         current_user_id = str(get_jwt_identity())
+        current_user = Usuario.query.get(current_user_id)
         id_departamento = data.get('id_departamento')
+        id_categoria = data.get('id_categoria')
 
         if not id_departamento:
             return jsonify({'error': 'Debe seleccionar un departamento'}), 400
+        
+        if not id_categoria:
+            return jsonify({'error': 'Debe seleccionar una categoría'}), 400
 
-         # ✅ Obtener agentes del departamento (ya corregido)
+        # Verificar que la categoría pertenece al departamento
+        categoria = Categoria.query.get(id_categoria)
+        if not categoria or categoria.id_departamento != id_departamento:
+            return jsonify({'error': 'La categoría no pertenece al departamento seleccionado'}), 400
+
+        # ✅ Obtener agentes del departamento
         agentes = Usuario.query.join(ticket_pivot_departamento_agente).filter(
             ticket_pivot_departamento_agente.c.id_departamento == id_departamento
         ).all()
 
-         # ✅ Asignar un agente aleatorio si hay disponibles
+        # ✅ Asignar un agente aleatorio si hay disponibles
         id_agente = str(random.choice(agentes).id) if agentes else None
 
-          # Obtener el estado "Abierto" y prioridad "Baja" si no se especifican
+        # Obtener el estado "Abierto" y prioridad "Baja" si no se especifican
         estado_abierto = TicketEstado.query.filter_by(nombre="Abierto").first()
         prioridad_baja = TicketPrioridad.query.filter_by(nombre="Baja").first()
 
         nuevo_ticket = Ticket(
             id_usuario=current_user_id,
-            id_agente=id_agente,  # Se asigna automáticamente un agente del departamento
-            id_estado=data.get('id_estado', estado_abierto.id if estado_abierto else None),  # Estado por defecto "Abierto"
-            id_prioridad=data.get('id_prioridad', prioridad_baja.id if prioridad_baja else None),  # Prioridad por defecto "Baja"
-            id_departamento=data.get('id_departamento'),
+            id_agente=id_agente,
+            id_sucursal=current_user.id_sucursalactiva,  # Usar la sucursal activa del usuario
+            id_estado=data.get('id_estado', estado_abierto.id if estado_abierto else None),
+            id_prioridad=data.get('id_prioridad', prioridad_baja.id if prioridad_baja else None),
+            id_departamento=id_departamento,
+            id_categoria=id_categoria,
             titulo=data.get('titulo'),
             descripcion=data.get('descripcion')
         )
@@ -338,11 +412,9 @@ def create_ticket():
         db.session.add(nuevo_ticket)
         db.session.commit()
 
-           # Notificar creación del ticket
-        usuario = Usuario.query.get(current_user_id)
+        # Notificar creación del ticket
         agente = Usuario.query.get(id_agente) if id_agente else None
-        notificar_creacion_ticket(nuevo_ticket, usuario, agente)  # Pasar los objetos directamente
-
+        notificar_creacion_ticket(nuevo_ticket, current_user, agente)
 
         return jsonify({'message': 'Ticket creado exitosamente', 'ticket_id': nuevo_ticket.id}), 201
 
@@ -357,7 +429,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'docx', 'xlsx'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Ruta para actualizar un ticket y adjuntar un archivo
+# Ruta para actualizar un ticket
 @api.route('/tickets/<int:id>', methods=['PUT'])
 @jwt_required()
 def update_ticket(id):
@@ -368,8 +440,15 @@ def update_ticket(id):
     if not ticket:
         return jsonify({'message': 'Ticket no encontrado'}), 404
 
-    if usuario.rol_obj.nombre != 'ADMINISTRADOR' and ticket.id_usuario != usuario.id:
-        return jsonify({'message': 'No tienes permiso para editar este ticket'}), 403
+    if usuario.rol_obj.nombre == 'ADMINISTRADOR':
+        pass  # Puede editar cualquier ticket
+    elif usuario.rol_obj.nombre == 'AGENTE':
+        departamentos_ids = [d.id for d in usuario.departamentos]
+        if ticket.id_departamento not in departamentos_ids:
+            return jsonify({'message': 'No tienes permiso para editar este ticket'}), 403
+    else:
+        if ticket.id_usuario != usuario.id:
+            return jsonify({'message': 'No tienes permiso para editar este ticket'}), 403
 
     data = request.get_json() or {}
 
@@ -380,7 +459,14 @@ def update_ticket(id):
     ticket.titulo = data.get('titulo', ticket.titulo)
     ticket.descripcion = data.get('descripcion', ticket.descripcion)
 
-    # Manejo de archivo opcional (si Flutter manda archivo, lo capturas aquí)
+    # Actualizar categoría si se proporciona
+    if 'id_categoria' in data:
+        categoria = Categoria.query.get(data['id_categoria'])
+        if not categoria or categoria.id_departamento != ticket.id_departamento:
+            return jsonify({'error': 'La categoría no pertenece al departamento del ticket'}), 400
+        ticket.id_categoria = data['id_categoria']
+
+    # Manejo de archivo opcional
     if 'file' in request.files:
         file = request.files['file']
         if file.filename == '':
@@ -437,8 +523,15 @@ def delete_ticket(id):
     if not ticket:
         return jsonify({'message': 'Ticket no encontrado'}), 404
 
-    if usuario.rol_obj.nombre != 'ADMINISTRADOR' and ticket.id_usuario != usuario.id:
-        return jsonify({'message': 'No tienes permiso para eliminar este ticket'}), 403
+    if usuario.rol_obj.nombre == 'ADMINISTRADOR':
+        pass  # Puede eliminar cualquier ticket
+    elif usuario.rol_obj.nombre == 'AGENTE':
+        departamentos_ids = [d.id for d in usuario.departamentos]
+        if ticket.id_departamento not in departamentos_ids:
+            return jsonify({'message': 'No tienes permiso para eliminar este ticket'}), 403
+    else:
+        if ticket.id_usuario != usuario.id:
+            return jsonify({'message': 'No tienes permiso para eliminar este ticket'}), 403
 
     db.session.delete(ticket)
     db.session.commit()
@@ -482,9 +575,10 @@ def get_estados():
 def register():
     try:
         data = request.get_json()
+        print("Datos recibidos para registro:", data)  # Log para debug
         
         # Validar campos requeridos
-        campos_requeridos = ['usuario', 'clave', 'correo', 'id_rol', 'id_sucursalactiva']
+        campos_requeridos = ['usuario', 'clave', 'correo', 'id_rol', 'id_sucursalactiva', 'sucursales_autorizadas']
         for campo in campos_requeridos:
             if campo not in data:
                 return jsonify({'error': f'El campo {campo} es requerido'}), 400
@@ -505,6 +599,12 @@ def register():
         # Encriptar la contraseña
         hashed_password = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
+        # Asegurarse de que la sucursal activa esté en las sucursales autorizadas
+        sucursales_autorizadas = set(data['sucursales_autorizadas'])
+        if data['id_sucursalactiva'] not in sucursales_autorizadas:
+            sucursales_autorizadas.add(data['id_sucursalactiva'])
+            print(f"Sucursal activa {data['id_sucursalactiva']} agregada a sucursales autorizadas")
+
         # Crear nuevo usuario con la nueva estructura
         nuevo_usuario = Usuario(
             id=user_id,
@@ -518,9 +618,36 @@ def register():
             id_rol=data['id_rol']
         )
             
+        # Agregar sucursales autorizadas (incluyendo la sucursal activa)
+        sucursales = Sucursal.query.filter(Sucursal.id.in_(sucursales_autorizadas)).all()
+        nuevo_usuario.sucursales_autorizadas = sucursales
+        print(f"Sucursales autorizadas asignadas: {[s.id for s in sucursales]}")
+
         db.session.add(nuevo_usuario)
         db.session.commit()
-        return jsonify({'message': 'Usuario registrado exitosamente'}), 201
+
+        # Obtener el usuario creado para la respuesta
+        usuario_creado = Usuario.query.get(user_id)
+        return jsonify({
+            'message': 'Usuario registrado exitosamente',
+            'usuario': {
+                'id': usuario_creado.id,
+                'nombre': usuario_creado.colaborador_obj.nombre if usuario_creado.colaborador_obj else usuario_creado.usuario,
+                'correo': usuario_creado.correo,
+                'rol': usuario_creado.rol_obj.nombre,
+                'sucursal_activa': {
+                    'id': usuario_creado.sucursal_obj.id,
+                    'nombre': usuario_creado.sucursal_obj.nombre
+                },
+                'sucursales_autorizadas': [
+                    {
+                        'id': sucursal.id,
+                        'nombre': sucursal.nombre
+                    } for sucursal in usuario_creado.sucursales_autorizadas
+                ],
+                'estado': usuario_creado.estado_obj.nombre
+            }
+        }), 201
     except Exception as e:
         print(f"🔸 Error en register: {str(e)}")
         db.session.rollback()
@@ -544,11 +671,25 @@ def login():
         # Acceder a rol_obj para obtener el rol del usuario
         rol = usuario.rol_obj.nombre  # Aquí se accede al nombre del rol
 
+        # Obtener información de la sucursal activa
+        sucursal_activa = Sucursal.query.get(usuario.id_sucursalactiva)
+        print("Sucursal activa encontrada:", sucursal_activa)
+        print("ID Sucursal:", usuario.id_sucursalactiva)
+        print("Nombre Sucursal:", sucursal_activa.nombre if sucursal_activa else None)
+
         # Crear access token y refresh token
         access_token = create_access_token(identity=str(usuario.id))
         refresh_token = create_refresh_token(identity=str(usuario.id))
 
-        return jsonify({
+        # Obtener las sucursales autorizadas
+        sucursales_autorizadas = [
+            {
+                'id': sucursal.id,
+                'nombre': sucursal.nombre
+            } for sucursal in usuario.sucursales_autorizadas
+        ]
+
+        response_data = {
             'access_token': access_token,
             'refresh_token': refresh_token,
             'usuario': {
@@ -556,9 +697,16 @@ def login():
                 'nombre': usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
                 'correo': usuario.correo,
                 'id_rol': usuario.id_rol,
-                'rol': rol
+                'rol': rol,
+                'sucursal_activa': {
+                    'id': sucursal_activa.id if sucursal_activa else None,
+                    'nombre': sucursal_activa.nombre if sucursal_activa else None
+                },
+                'sucursales_autorizadas': sucursales_autorizadas
             }
-        }), 200
+        }
+        print("Respuesta de login:", response_data)
+        return jsonify(response_data), 200
     except Exception as e:
         print(f"🔸 Error en login: {str(e)}")
         return jsonify({'error': 'Ocurrió un error en el inicio de sesión'}), 500
@@ -739,17 +887,46 @@ def get_roles():
 # Ruta para filtrar usuarios activos
 @api.route('/usuarios', methods=['GET'])
 @jwt_required()
-@role_required(['ADMINISTRADOR'])  # Solo el administrador puede ver la lista de usuarios
 def get_usuarios():
     try:
-        usuarios = Usuario.query.all()  # Trae todos los usuarios, activos e inactivos
+        current_user_id = get_jwt_identity()
+        current_user = Usuario.query.get(current_user_id)
+        
+        if not current_user:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+
+        # Si es administrador, puede ver todos los usuarios
+        if current_user.rol_obj.nombre == 'ADMINISTRADOR':
+            usuarios = Usuario.query.all()
+        # Si es agente, solo ve usuarios de sus sucursales autorizadas
+        elif current_user.rol_obj.nombre == 'AGENTE':
+            sucursales_ids = [s.id for s in current_user.sucursales_autorizadas]
+            usuarios = Usuario.query.filter(
+                Usuario.id_sucursalactiva.in_(sucursales_ids)
+            ).all()
+        # Si es usuario normal, solo ve su propia información
+        else:
+            usuarios = [current_user]
+
+        for usuario in usuarios:
+            print(f"Usuario: {usuario.usuario} | ID: {usuario.id} | Departamentos: {[d.id for d in usuario.departamentos]}")
         usuario_list = [{
             "id": usuario.id,
             "nombre": usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
             "correo": usuario.correo,
             "rol": usuario.rol_obj.nombre,
-            "sucursal": usuario.sucursal_obj.nombre,
-            "estado": usuario.estado_obj.nombre
+            "sucursal_activa": {
+                "id": usuario.sucursal_obj.id if usuario.sucursal_obj else None,
+                "nombre": usuario.sucursal_obj.nombre if usuario.sucursal_obj else "No asignada"
+            },
+            "sucursales_autorizadas": [
+                {
+                    "id": sucursal.id,
+                    "nombre": sucursal.nombre
+                } for sucursal in usuario.sucursales_autorizadas
+            ],
+            "estado": usuario.estado_obj.nombre,
+            "id_departamento": [d.id for d in usuario.departamentos] if usuario.departamentos else None
         } for usuario in usuarios]
 
         return jsonify(usuario_list), 200
@@ -761,36 +938,79 @@ def get_usuarios():
 # Ruta para actualizar usuarios 
 @api.route('/usuarios/<user_id>', methods=['PUT'])
 @jwt_required()
-@role_required(['ADMINISTRADOR'])
 def update_usuario(user_id):
+    current_user_id = get_jwt_identity()
     usuario = Usuario.query.get(user_id)
     if not usuario:
         return jsonify({'message': 'Usuario no encontrado'}), 404
 
+    # Solo permitir que un usuario edite su propio perfil o que un ADMINISTRADOR edite a cualquiera
+    current_user = Usuario.query.get(current_user_id)
+    if current_user.id != user_id and current_user.rol_obj.nombre != 'ADMINISTRADOR':
+        return jsonify({'message': 'No tienes permiso para editar este usuario'}), 403
+
     data = request.get_json()
-     # Solo actualiza los campos proporcionados
+    print("Datos recibidos para actualización:", data)  # Log para debug
+
+    # Actualizar campos básicos
     if 'nombre' in data:
         usuario.nombre = data['nombre']
     if 'correo' in data:
         usuario.correo = data['correo']
     if 'clave' in data and data['clave']:
-        usuario.clave = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')  # Encriptar clave solo si se proporciona
+        usuario.clave = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     if 'id_rol' in data:
         usuario.id_rol = data['id_rol']
-    if 'id_sucursalactiva' in data:
-        usuario.id_sucursalactiva = data['id_sucursalactiva']
     if 'id_estado' in data:
         usuario.id_estado = data['id_estado']
     if 'id_colaborador' in data:
         usuario.id_colaborador = data['id_colaborador']
 
+    # Actualizar sucursal activa
+    if 'id_sucursalactiva' in data:
+        # Verificar que la sucursal activa esté en las sucursales autorizadas
+        if 'sucursales_autorizadas' in data and data['id_sucursalactiva'] not in data['sucursales_autorizadas']:
+            return jsonify({'error': 'La sucursal activa debe estar en las sucursales autorizadas'}), 400
+        usuario.id_sucursalactiva = data['id_sucursalactiva']
+
+    # Actualizar sucursales autorizadas
+    if 'sucursales_autorizadas' in data:
+        print("Actualizando sucursales autorizadas:", data['sucursales_autorizadas'])  # Log para debug
+        # Obtener las sucursales de la base de datos
+        sucursales = Sucursal.query.filter(Sucursal.id.in_(data['sucursales_autorizadas'])).all()
+        # Actualizar la relación
+        usuario.sucursales_autorizadas = sucursales
+        print("Sucursales autorizadas actualizadas:", [s.id for s in usuario.sucursales_autorizadas])  # Log para debug
+
     try:
         db.session.commit()
-        return jsonify({'message': 'Usuario actualizado correctamente'}), 200
+        # Obtener el usuario actualizado para la respuesta
+        usuario_actualizado = Usuario.query.get(user_id)
+        return jsonify({
+            'message': 'Usuario actualizado correctamente',
+            'usuario': {
+                'id': usuario_actualizado.id,
+                'nombre': usuario_actualizado.colaborador_obj.nombre if usuario_actualizado.colaborador_obj else usuario_actualizado.usuario,
+                'correo': usuario_actualizado.correo,
+                'rol': usuario_actualizado.rol_obj.nombre,
+                'sucursal_activa': {
+                    'id': usuario_actualizado.sucursal_obj.id,
+                    'nombre': usuario_actualizado.sucursal_obj.nombre
+                },
+                'sucursales_autorizadas': [
+                    {
+                        'id': sucursal.id,
+                        'nombre': sucursal.nombre
+                    } for sucursal in usuario_actualizado.sucursales_autorizadas
+                ],
+                'estado': usuario_actualizado.estado_obj.nombre
+            }
+        }), 200
     except Exception as e:
         db.session.rollback()
+        print(f"Error al guardar cambios: {str(e)}")  # Log para debug
         return jsonify({'error': f'Error al actualizar usuario: {str(e)}'}), 500
-    
+
 # ruta para eliminar un usurio
 @api.route('/usuarios/<user_id>', methods=['DELETE'])
 @jwt_required()
@@ -1238,6 +1458,21 @@ def get_colaboradores():
     except Exception as e:
         print(f"Error al obtener colaboradores: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener los colaboradores'}), 500
+
+# Ruta para obtener categorías por departamento
+@api.route('/categorias', methods=['GET'])
+@jwt_required()
+def get_categorias_por_departamento():
+    try:
+        departamento_id = request.args.get('departamento_id')
+        if not departamento_id:
+            return jsonify({'error': 'Se requiere el ID del departamento'}), 400
+
+        categorias = Categoria.query.filter_by(id_departamento=departamento_id).all()
+        return jsonify([{'id': c.id, 'nombre': c.nombre} for c in categorias]), 200
+    except Exception as e:
+        print(f"🔸 Error en get_categorias_por_departamento: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las categorías'}), 500
 
 
 

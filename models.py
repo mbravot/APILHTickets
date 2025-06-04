@@ -40,6 +40,7 @@ class Sucursal(db.Model):
     ubicacion = db.Column(db.String(255), nullable=True)
     id_empresa = db.Column(db.Integer, nullable=True)
     usuarios = db.relationship('Usuario', back_populates='sucursal_obj')
+    tickets = db.relationship('Ticket', back_populates='sucursal')
 
 # 🔹 Modelo Rol
 class Rol(db.Model):
@@ -47,6 +48,15 @@ class Rol(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(45), nullable=False)
     usuarios = db.relationship('Usuario', back_populates='rol_obj', lazy='dynamic')
+
+# 🔹 Tabla intermedia para la relación muchos a muchos entre Usuarios y Sucursales
+usuario_pivot_sucursal_usuario = Table(
+    'usuario_pivot_sucursal_usuario',
+    db.metadata,
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('id_sucursal', Integer, ForeignKey('general_dim_sucursal.id'), nullable=False),
+    Column('id_usuario', String(45), ForeignKey('general_dim_usuario.id'), nullable=False)
+)
 
 # 🔹 Modelo Usuario
 class Usuario(db.Model):
@@ -63,8 +73,13 @@ class Usuario(db.Model):
 
     # ✅ Relaciones corregidas
     rol_obj = db.relationship('Rol', back_populates='usuarios')
-    sucursal_obj = db.relationship('Sucursal', back_populates='usuarios')  
+    sucursal_obj = db.relationship('Sucursal', back_populates='usuarios', foreign_keys=[id_sucursalactiva])
     estado_obj = db.relationship('Estado', back_populates='usuarios')  
+    
+    # ✅ Nueva relación para sucursales autorizadas
+    sucursales_autorizadas = relationship("Sucursal", 
+                                        secondary=usuario_pivot_sucursal_usuario,
+                                        backref=db.backref('usuarios_autorizados', lazy='dynamic'))
 
     # ✅ Relación con Departamentos (Muchos a Muchos)
     departamentos = relationship("Departamento", secondary=ticket_pivot_departamento_agente, back_populates="agentes")
@@ -74,6 +89,9 @@ class TicketEstado(db.Model):
     __tablename__ = 'ticket_dim_estado'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), nullable=False)
+    
+    # Relación con Tickets
+    tickets = relationship('Ticket', back_populates='estado')
 
 # 🔹 Modelo TicketPrioridad
 class TicketPrioridad(db.Model):
@@ -81,37 +99,44 @@ class TicketPrioridad(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), nullable=False)
 
-# 🔹 Modelo Departamento
-class Departamento(db.Model):
-    __tablename__ = 'general_dim_departamento'
-    id = db.Column(Integer, primary_key=True)
-    nombre = db.Column(db.String(100), nullable=False)
-    id_empresa = db.Column(Integer, nullable=False, default=1)
+    # Relación con Tickets
+    tickets = relationship('Ticket', back_populates='prioridad')
 
-    # ✅ Relación con Agentes (Muchos a Muchos)
-    agentes = relationship("Usuario", secondary=ticket_pivot_departamento_agente, back_populates="departamentos")
+# 🔹 Modelo Categoria
+class Categoria(db.Model):
+    __tablename__ = 'ticket_dim_categoria'
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    nombre = db.Column(String(100), nullable=False)
+    id_departamento = db.Column(Integer, ForeignKey('general_dim_departamento.id'), nullable=False)
+    
+    # Relaciones
+    departamento = db.relationship('Departamento', back_populates='categorias')
 
 # 🔹 Modelo Ticket
 class Ticket(db.Model):
     __tablename__ = 'ticket_fact_registro'
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    id_usuario = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=False)  # Usuario que creó el ticket
-    id_agente = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=True)  # Agente asignado al ticket
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=False)
+    id_agente = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=True)
+    id_sucursal = db.Column(Integer, ForeignKey('general_dim_sucursal.id'), nullable=False)
     id_estado = db.Column(Integer, ForeignKey('ticket_dim_estado.id'), nullable=False)
     id_prioridad = db.Column(Integer, ForeignKey('ticket_dim_prioridad.id'), nullable=False)
     id_departamento = db.Column(Integer, ForeignKey('general_dim_departamento.id'), nullable=False)
-    titulo = db.Column(db.String(150), nullable=False)
+    id_categoria = db.Column(Integer, ForeignKey('ticket_dim_categoria.id'), nullable=False)
+    titulo = db.Column(String(255), nullable=False)
     descripcion = db.Column(Text, nullable=False)
-    fecha_creacion = db.Column(DateTime, default=lambda: datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(CHILE_TZ))
+    fecha_creacion = db.Column(DateTime, nullable=False, default=datetime.now)
     fecha_cierre = db.Column(DateTime, nullable=True)
-    adjunto = db.Column(db.String(255), nullable=True) 
+    adjunto = db.Column(String(255), nullable=True)
 
-    # Relaciones con otros modelos
-    usuario = db.relationship('Usuario', foreign_keys=[id_usuario], backref='tickets_creados', lazy='joined')
-    agente = db.relationship('Usuario', foreign_keys=[id_agente], backref='tickets_asignados', lazy='joined')  
-    estado = db.relationship('TicketEstado', backref='tickets', lazy='joined')
-    prioridad = db.relationship('TicketPrioridad', backref='tickets', lazy='joined')
-    departamento = db.relationship('Departamento', backref='tickets', lazy='joined')
+    # Relaciones
+    usuario = db.relationship('Usuario', foreign_keys=[id_usuario], backref='tickets_creados')
+    agente = db.relationship('Usuario', foreign_keys=[id_agente], backref='tickets_asignados')
+    estado = db.relationship('TicketEstado', back_populates='tickets')
+    prioridad = db.relationship('TicketPrioridad', back_populates='tickets')
+    departamento = db.relationship('Departamento', back_populates='tickets')
+    categoria = db.relationship('Categoria', backref='tickets')
+    sucursal = db.relationship('Sucursal', foreign_keys=[id_sucursal], back_populates='tickets')
 
 # 🔹 Modelo TicketComentario
 class TicketComentario(db.Model):
@@ -125,5 +150,21 @@ class TicketComentario(db.Model):
     # Relaciones con Ticket y Usuario
     ticket = db.relationship('Ticket', backref=db.backref('comentarios', cascade='all, delete-orphan', passive_deletes=True))
     usuario = db.relationship('Usuario', backref='comentarios', lazy='joined')
+
+# 🔹 Modelo Departamento
+class Departamento(db.Model):
+    __tablename__ = 'general_dim_departamento'
+    id = db.Column(Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    id_empresa = db.Column(Integer, nullable=False, default=1)
+
+    # ✅ Relación con Agentes (Muchos a Muchos)
+    agentes = relationship("Usuario", secondary=ticket_pivot_departamento_agente, back_populates="departamentos")
+    
+    # ✅ Relación con Categorías
+    categorias = relationship("Categoria", back_populates="departamento")
+    
+    # ✅ Relación con Tickets
+    tickets = relationship("Ticket", back_populates="departamento")
 
     #fin  

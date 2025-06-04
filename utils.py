@@ -42,7 +42,7 @@ setup_logging()
 # Cargar variables desde .env
 SMTP_USUARIO = os.getenv("SMTP_USUARIO")
 SMTP_CLAVE = os.getenv("SMTP_CLAVE")
-SMTP_SERVER = os.getenv("SMTP_SERVER", "in-v3.mailjet.com")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_DISPLAY_NAME = os.getenv("SMTP_DISPLAY_NAME", "Sistema de Tickets")
 
