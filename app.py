@@ -5,8 +5,15 @@ from dotenv import load_dotenv
 # Cargar variables de entorno al inicio
 load_dotenv()
 
+# Cargar configuración temporal para Google Cloud SQL
+try:
+    import temp_env
+    print("✅ Configuración de Google Cloud SQL cargada")
+except ImportError:
+    print("⚠️  Archivo temp_env.py no encontrado, usando configuración por defecto")
+
 from flask import Flask, request
-from config import Config
+from cloud_sql_config import CloudSQLConfig as Config
 from models import db
 from flask_jwt_extended import JWTManager
 from routes import api, auth
