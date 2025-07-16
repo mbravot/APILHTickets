@@ -27,4 +27,4 @@ ENV FLASK_ENV=production
 ENV FLASK_DEBUG=0
 
 # Comando para ejecutar la aplicación
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app_cloud_run:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app:app"] 
