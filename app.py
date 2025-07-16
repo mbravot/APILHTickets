@@ -5,12 +5,20 @@ from dotenv import load_dotenv
 # Cargar variables de entorno al inicio
 load_dotenv()
 
-# Cargar configuración temporal para Google Cloud SQL
-try:
-    import temp_env
-    print("✅ Configuración de Google Cloud SQL cargada")
-except ImportError:
-    print("⚠️  Archivo temp_env.py no encontrado, usando configuración por defecto")
+# Cargar configuración según el entorno
+import os
+if os.getenv('FLASK_ENV') == 'production' or os.getenv('K_SERVICE'):  # K_SERVICE indica que estamos en Cloud Run
+    try:
+        import cloud_run_env
+        print("✅ Configuración de Cloud Run cargada")
+    except ImportError:
+        print("⚠️  Archivo cloud_run_env.py no encontrado, usando configuración por defecto")
+else:
+    try:
+        import temp_env
+        print("✅ Configuración de desarrollo local cargada")
+    except ImportError:
+        print("⚠️  Archivo temp_env.py no encontrado, usando configuración por defecto")
 
 from flask import Flask, request
 from cloud_sql_config import CloudSQLConfig as Config
