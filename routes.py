@@ -2,7 +2,7 @@ import os
 import time
 import uuid
 from flask import Blueprint, request, jsonify
-from models import Rol, db, Ticket, Usuario, TicketEstado, TicketPrioridad, Departamento, TicketComentario, Sucursal, ticket_pivot_departamento_agente, Colaborador, Categoria
+from models import Rol, db, Ticket, Usuario, TicketEstado, TicketPrioridad, Departamento, TicketComentario, Sucursal, ticket_pivot_departamento_agente, Colaborador, Categoria, usuario_pivot_app_usuario
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -29,6 +29,27 @@ auth = Blueprint('auth', __name__)
 load_dotenv()
 
 CHILE_TZ = pytz.timezone('America/Santiago')
+
+# ✅ Decorador para verificar acceso a apps
+def app_required(app_id):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            current_user_id = get_jwt_identity()
+            if not verificar_acceso_app(current_user_id, app_id):
+                return jsonify({'message': f'No tienes acceso a la aplicación requerida'}), 403
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+# ✅ Función auxiliar para verificar acceso a apps
+def verificar_acceso_app(usuario_id, app_id):
+    """Verifica si un usuario tiene acceso a una app específica"""
+    app_acceso = db.session.query(usuario_pivot_app_usuario).filter(
+        usuario_pivot_app_usuario.c.id_usuario == usuario_id,
+        usuario_pivot_app_usuario.c.id_app == app_id
+    ).first()
+    return app_acceso is not None
 
 # Función de notificación por correo
 def notificar_creacion_ticket(ticket, usuario, agente):
@@ -218,9 +239,6 @@ def permiso_requerido(roles_permitidos):
         def wrapper(*args, **kwargs):
             current_user_id = get_jwt_identity()
             usuario = Usuario.query.get(current_user_id)
-            if usuario:
-                print("Rol del usuario autenticado:", usuario.rol_obj.nombre)
-            print("Roles permitidos:", roles_permitidos)
             if not usuario or usuario.rol_obj.nombre not in roles_permitidos:
                 return jsonify({'message': 'Acceso denegado'}), 403
             return func(*args, **kwargs)
@@ -230,17 +248,14 @@ def permiso_requerido(roles_permitidos):
 # Ruta para obtener tickets
 @api.route('/tickets', methods=['GET'])
 @jwt_required()
+@app_required(1)  # ✅ Requiere acceso a la app con id=1
 def get_tickets():
-    print("🔹 Recibida petición: GET /api/tickets")
-
     try:
         current_user_id = get_jwt_identity()
         usuario = Usuario.query.get(current_user_id)
 
         if not usuario:
             return jsonify({"error": "Usuario no encontrado"}), 404
-
-        print(f"🔹 Usuario autenticado: {usuario.usuario} ({usuario.rol_obj.nombre})")
 
         # Obtener tickets según el rol del usuario
         if usuario.rol_obj.nombre == "ADMINISTRADOR":
@@ -249,24 +264,18 @@ def get_tickets():
         elif usuario.rol_obj.nombre == "AGENTE":
             # Obtener los departamentos asignados al agente
             departamentos_ids = [d.id for d in usuario.departamentos]
-            print(f"Departamentos del agente: {departamentos_ids}")
             
             # Agentes ven tickets de sus departamentos asignados
             tickets = Ticket.query.filter(
                 Ticket.id_departamento.in_(departamentos_ids)
             ).order_by(Ticket.fecha_creacion.desc()).all()
-            
-            print(f"Tickets encontrados para el agente: {len(tickets)}")
         else:  # Usuario normal
             # Usuarios normales ven sus propios tickets
             tickets = Ticket.query.filter_by(id_usuario=current_user_id).order_by(Ticket.fecha_creacion.desc()).all()
 
         ticket_list = []
         for ticket in tickets:
-            # DEBUG: Log para depuración de sucursal
-            print(f"Ticket ID: {ticket.id} | id_sucursal: {ticket.id_sucursal}")
             sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
-            print(f"Sucursal encontrada: {sucursal_obj}")
             nombre_sucursal = sucursal_obj.nombre if sucursal_obj else "No asignada"
             ticket_list.append({
                 "id": ticket.id,
@@ -327,10 +336,7 @@ def get_ticket(id):
         for c in comentarios
     ]
 
-    # DEBUG: Log para depuración de sucursal en detalle
-    print(f"Ticket ID: {ticket.id} | id_sucursal: {ticket.id_sucursal}")
     sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
-    print(f"Sucursal encontrada: {sucursal_obj}")
     nombre_sucursal = sucursal_obj.nombre if sucursal_obj else "No asignada"
     ticket_data = {
         "id": ticket.id,
@@ -366,6 +372,7 @@ def get_ticket(id):
 @api.route('/tickets', methods=['POST'])
 @jwt_required()
 @permiso_requerido(['ADMINISTRADOR', 'AGENTE', 'USUARIO'])
+@app_required(1)  # ✅ Requiere acceso a la app con id=1
 def create_ticket():
     try:
         data = request.get_json()
@@ -659,23 +666,29 @@ def register():
 def login():
     try:
         data = request.get_json()
-        print("Correo recibido:", data.get('correo'))
         usuario = Usuario.query.filter_by(correo=data.get('correo')).first()
-        print("Usuario encontrado:", usuario)
-        if usuario:
-            print("Hash en BD:", usuario.clave)
-            print("Comparación bcrypt:", bcrypt.checkpw(data['clave'].encode('utf-8'), usuario.clave.encode('utf-8')))
+        
         if not usuario or not bcrypt.checkpw(data['clave'].encode('utf-8'), usuario.clave.encode('utf-8')):
             return jsonify({'message': 'Credenciales inválidas'}), 401
+        
+        # ✅ Verificar que el usuario esté activo (id_estado=1)
+        if usuario.id_estado != 1:
+            return jsonify({'message': 'Tu cuenta no está activa. Contacta al administrador.'}), 403
+        
+        # ✅ Verificar que el usuario tenga acceso a la app con id_app=1
+        app_acceso = db.session.query(usuario_pivot_app_usuario).filter(
+            usuario_pivot_app_usuario.c.id_usuario == usuario.id,
+            usuario_pivot_app_usuario.c.id_app == 1
+        ).first()
+        
+        if not app_acceso:
+            return jsonify({'message': 'No tienes acceso a esta aplicación'}), 403
         
         # Acceder a rol_obj para obtener el rol del usuario
         rol = usuario.rol_obj.nombre  # Aquí se accede al nombre del rol
 
         # Obtener información de la sucursal activa
         sucursal_activa = Sucursal.query.get(usuario.id_sucursalactiva)
-        print("Sucursal activa encontrada:", sucursal_activa)
-        print("ID Sucursal:", usuario.id_sucursalactiva)
-        print("Nombre Sucursal:", sucursal_activa.nombre if sucursal_activa else None)
 
         # Crear access token y refresh token
         access_token = create_access_token(identity=str(usuario.id))
@@ -705,7 +718,6 @@ def login():
                 'sucursales_autorizadas': sucursales_autorizadas
             }
         }
-        print("Respuesta de login:", response_data)
         return jsonify(response_data), 200
     except Exception as e:
         print(f"🔸 Error en login: {str(e)}")
@@ -727,7 +739,6 @@ def refresh():
 @api.route('/tickets/<int:ticket_id>/comentarios', methods=['GET'])
 @jwt_required()
 def get_ticket_comentarios(ticket_id):
-    print(f"🔹 Petición para obtener comentarios del ticket ID {ticket_id}")
     try:
         comentarios = TicketComentario.query.filter_by(id_ticket=ticket_id).all()
         comentarios_list = [
@@ -756,11 +767,8 @@ def get_ticket_comentarios(ticket_id):
 @jwt_required()
 @role_required(['USUARIO', 'AGENTE', 'ADMINISTRADOR'])
 def add_ticket_comentario(ticket_id):
-    print(f"🔹 Petición para agregar comentario al ticket ID {ticket_id}")
     try:
         data = request.get_json()
-        print("Datos recibidos para comentario:", data)
-        print("ID recibido para comentario:", ticket_id)
         current_user = get_jwt_identity()
         nuevo_comentario = TicketComentario(
             id_ticket=ticket_id,
@@ -908,8 +916,6 @@ def get_usuarios():
         else:
             usuarios = [current_user]
 
-        for usuario in usuarios:
-            print(f"Usuario: {usuario.usuario} | ID: {usuario.id} | Departamentos: {[d.id for d in usuario.departamentos]}")
         usuario_list = [{
             "id": usuario.id,
             "nombre": usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
@@ -928,6 +934,9 @@ def get_usuarios():
             "estado": usuario.estado_obj.nombre,
             "id_departamento": [d.id for d in usuario.departamentos] if usuario.departamentos else None
         } for usuario in usuarios]
+
+        # Ordenar alfabéticamente por nombre
+        usuario_list.sort(key=lambda x: x['nombre'].lower())
 
         return jsonify(usuario_list), 200
 
@@ -950,7 +959,6 @@ def update_usuario(user_id):
         return jsonify({'message': 'No tienes permiso para editar este usuario'}), 403
 
     data = request.get_json()
-    print("Datos recibidos para actualización:", data)  # Log para debug
 
     # Actualizar campos básicos
     if 'nombre' in data:
@@ -975,12 +983,10 @@ def update_usuario(user_id):
 
     # Actualizar sucursales autorizadas
     if 'sucursales_autorizadas' in data:
-        print("Actualizando sucursales autorizadas:", data['sucursales_autorizadas'])  # Log para debug
         # Obtener las sucursales de la base de datos
         sucursales = Sucursal.query.filter(Sucursal.id.in_(data['sucursales_autorizadas'])).all()
         # Actualizar la relación
         usuario.sucursales_autorizadas = sucursales
-        print("Sucursales autorizadas actualizadas:", [s.id for s in usuario.sucursales_autorizadas])  # Log para debug
 
     try:
         db.session.commit()
@@ -1008,7 +1014,7 @@ def update_usuario(user_id):
         }), 200
     except Exception as e:
         db.session.rollback()
-        print(f"Error al guardar cambios: {str(e)}")  # Log para debug
+        print(f"Error al guardar cambios: {str(e)}")
         return jsonify({'error': f'Error al actualizar usuario: {str(e)}'}), 500
 
 # ruta para eliminar un usurio
@@ -1016,20 +1022,16 @@ def update_usuario(user_id):
 @jwt_required()
 @role_required(['ADMINISTRADOR'])
 def delete_usuario(user_id):
-    print(f"Intentando eliminar usuario: {user_id}")
     usuario = Usuario.query.get(user_id)
     if not usuario:
-        print("Usuario no encontrado")
         return jsonify({'message': 'Usuario no encontrado'}), 404
     try:
         # Verificar si el usuario tiene tickets asociados
         tickets_asociados = Ticket.query.filter_by(id_usuario=user_id).count()
         if tickets_asociados > 0:
-            print("No se puede eliminar el usuario porque tiene tickets asociados")
             return jsonify({'error': 'No se puede eliminar el usuario porque tiene tickets asociados'}), 400
         db.session.delete(usuario)
         db.session.commit()
-        print("Usuario eliminado correctamente")
         return jsonify({'message': 'Usuario eliminado correctamente'}), 200
     except Exception as e:
         db.session.rollback()
@@ -1047,8 +1049,6 @@ def allowed_file(filename):
 @api.route('/tickets/<int:id>/upload', methods=['POST'])
 @jwt_required()
 def upload_file(id):
-    print(f"🔹 Recibida petición: POST /api/tickets/{id}/upload")
-
     ticket = Ticket.query.get(id)
     if not ticket:
         return jsonify({'message': 'Ticket no encontrado'}), 404
@@ -1474,6 +1474,307 @@ def get_categorias_por_departamento():
         print(f"🔸 Error en get_categorias_por_departamento: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener las categorías'}), 500
 
+# Ruta para obtener apps disponibles
+@api.route('/apps', methods=['GET'])
+@jwt_required()
+def get_apps():
+    try:
+        from models import App
+        apps = App.query.all()
+        return jsonify([{
+            'id': app.id,
+            'nombre': app.nombre,
+            'descripcion': app.descripcion,
+            'url': app.URL
+        } for app in apps]), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener apps: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las apps'}), 500
+
+# Ruta para obtener apps del usuario
+@api.route('/usuario/apps', methods=['GET'])
+@jwt_required()
+def get_usuario_apps():
+    try:
+        current_user_id = get_jwt_identity()
+        usuario = Usuario.query.get(current_user_id)
+        
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Obtener las apps a las que tiene acceso el usuario
+        apps_usuario = usuario.apps
+        
+        return jsonify([{
+            'id': app.id,
+            'nombre': app.nombre,
+            'descripcion': app.descripcion,
+            'url': app.URL
+        } for app in apps_usuario]), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener apps del usuario: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las apps del usuario'}), 500
+
+# ✅ ADMINISTRADOR: Obtener todas las apps disponibles
+@api.route('/admin/apps', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_all_apps():
+    try:
+        from models import App
+        apps = App.query.all()
+        return jsonify([{
+            'id': app.id,
+            'nombre': app.nombre,
+            'descripcion': app.descripcion,
+            'url': app.URL
+        } for app in apps]), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener todas las apps: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las apps'}), 500
+
+# ✅ ADMINISTRADOR: Obtener usuarios con sus apps asignadas
+@api.route('/admin/usuarios-apps', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_usuarios_con_apps():
+    try:
+        usuarios = Usuario.query.all()
+        usuarios_apps = []
+        
+        for usuario in usuarios:
+            apps_usuario = [{
+                'id': app.id, 
+                'nombre': app.nombre,
+                'descripcion': app.descripcion,
+                'url': app.URL
+            } for app in usuario.apps]
+            
+            # Obtener el nombre completo para ordenamiento
+            nombre_usuario = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario
+            
+            usuarios_apps.append({
+                'id': usuario.id,
+                'nombre': nombre_usuario,
+                'correo': usuario.correo,
+                'rol': usuario.rol_obj.nombre,
+                'estado': usuario.estado_obj.nombre,
+                'apps': apps_usuario
+            })
+        
+        # Ordenar alfabéticamente por nombre
+        usuarios_apps.sort(key=lambda x: x['nombre'].lower())
+        
+        return jsonify(usuarios_apps), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener usuarios con apps: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los usuarios con apps'}), 500
+
+# ✅ ADMINISTRADOR: Asignar apps a un usuario
+@api.route('/admin/usuarios/<user_id>/apps', methods=['PUT'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def asignar_apps_a_usuario(user_id):
+    try:
+        usuario = Usuario.query.get(user_id)
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        data = request.get_json()
+        app_ids = data.get('app_ids', [])
+        
+        if not isinstance(app_ids, list):
+            return jsonify({'error': 'app_ids debe ser una lista'}), 400
+        
+        # Obtener las apps de la base de datos
+        from models import App
+        apps = App.query.filter(App.id.in_(app_ids)).all()
+        
+        # Limpiar asignaciones existentes
+        usuario.apps = []
+        db.session.commit()
+        
+        # Asignar las nuevas apps con IDs únicos
+        for app in apps:
+            # Generar ID único para cada asignación
+            import uuid
+            pivot_id = str(uuid.uuid4())
+            
+            # Insertar directamente en la tabla pivot
+            db.session.execute(
+                usuario_pivot_app_usuario.insert().values(
+                    id=pivot_id,
+                    id_usuario=usuario.id,
+                    id_app=app.id
+                )
+            )
+        
+        db.session.commit()
+        
+        # Obtener las apps actualizadas para la respuesta
+        apps_actualizadas = [{
+            'id': app.id, 
+            'nombre': app.nombre,
+            'descripcion': app.descripcion,
+            'url': app.URL
+        } for app in usuario.apps]
+        
+        return jsonify({
+            'message': 'Apps asignadas correctamente',
+            'usuario': {
+                'id': usuario.id,
+                'nombre': usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
+                'correo': usuario.correo,
+                'apps': apps_actualizadas
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al asignar apps al usuario: {str(e)}")
+        return jsonify({'error': f'Error al asignar apps al usuario: {str(e)}'}), 500
+
+# ✅ ADMINISTRADOR: Obtener apps de un usuario específico
+@api.route('/admin/usuarios/<user_id>/apps', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_apps_de_usuario(user_id):
+    try:
+        usuario = Usuario.query.get(user_id)
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        apps_usuario = [{
+            'id': app.id, 
+            'nombre': app.nombre,
+            'descripcion': app.descripcion,
+            'url': app.URL
+        } for app in usuario.apps]
+        
+        return jsonify({
+            'usuario': {
+                'id': usuario.id,
+                'nombre': usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
+                'correo': usuario.correo,
+                'rol': usuario.rol_obj.nombre
+            },
+            'apps': apps_usuario
+        }), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener apps del usuario: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las apps del usuario'}), 500
+
+# ✅ ADMINISTRADOR: Crear nueva app
+@api.route('/admin/apps', methods=['POST'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def crear_app():
+    try:
+        data = request.get_json()
+        nombre = data.get('nombre')
+        descripcion = data.get('descripcion')
+        url = data.get('url')
+        
+        if not nombre:
+            return jsonify({'error': 'El nombre de la app es requerido'}), 400
+        
+        # Verificar si la app ya existe
+        from models import App
+        app_existente = App.query.filter_by(nombre=nombre).first()
+        if app_existente:
+            return jsonify({'error': 'La app ya existe'}), 400
+        
+        # Crear la nueva app
+        nueva_app = App(
+            nombre=nombre,
+            descripcion=descripcion,
+            URL=url
+        )
+        db.session.add(nueva_app)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'App creada exitosamente',
+            'app': {
+                'id': nueva_app.id,
+                'nombre': nueva_app.nombre,
+                'descripcion': nueva_app.descripcion,
+                'url': nueva_app.URL
+            }
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al crear app: {str(e)}")
+        return jsonify({'error': f'Error al crear la app: {str(e)}'}), 500
+
+# ✅ ADMINISTRADOR: Editar app
+@api.route('/admin/apps/<int:app_id>', methods=['PUT'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def editar_app(app_id):
+    try:
+        from models import App
+        app = App.query.get(app_id)
+        if not app:
+            return jsonify({'error': 'App no encontrada'}), 404
+        
+        data = request.get_json()
+        nombre = data.get('nombre')
+        descripcion = data.get('descripcion')
+        url = data.get('url')
+        
+        if nombre:
+            # Verificar si el nuevo nombre ya existe en otra app
+            app_existente = App.query.filter(App.nombre == nombre, App.id != app_id).first()
+            if app_existente:
+                return jsonify({'error': 'Ya existe una app con ese nombre'}), 400
+            
+            app.nombre = nombre
+        
+        if descripcion is not None:
+            app.descripcion = descripcion
+        
+        if url is not None:
+            app.URL = url
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'App actualizada correctamente',
+            'app': {
+                'id': app.id,
+                'nombre': app.nombre,
+                'descripcion': app.descripcion,
+                'url': app.URL
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al editar app: {str(e)}")
+        return jsonify({'error': f'Error al editar la app: {str(e)}'}), 500
+
+# ✅ ADMINISTRADOR: Eliminar app
+@api.route('/admin/apps/<int:app_id>', methods=['DELETE'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def eliminar_app(app_id):
+    try:
+        from models import App
+        app = App.query.get(app_id)
+        if not app:
+            return jsonify({'error': 'App no encontrada'}), 404
+        
+        # Verificar si la app tiene usuarios asignados
+        if app.usuarios:
+            return jsonify({'error': 'No se puede eliminar la app porque tiene usuarios asignados'}), 400
+        
+        db.session.delete(app)
+        db.session.commit()
+        
+        return jsonify({'message': 'App eliminada correctamente'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al eliminar app: {str(e)}")
+        return jsonify({'error': f'Error al eliminar la app: {str(e)}'}), 500
 
 
 

@@ -58,6 +58,15 @@ usuario_pivot_sucursal_usuario = Table(
     Column('id_usuario', String(45), ForeignKey('general_dim_usuario.id'), nullable=False)
 )
 
+# 🔹 Tabla intermedia para la relación muchos a muchos entre Usuarios y Apps
+usuario_pivot_app_usuario = Table(
+    'usuario_pivot_app_usuario',
+    db.metadata,
+    Column('id', String(45), primary_key=True, autoincrement=False),
+    Column('id_usuario', String(45), ForeignKey('general_dim_usuario.id'), nullable=False),
+    Column('id_app', Integer, ForeignKey('general_dim_app.id'), nullable=False)
+)
+
 # 🔹 Modelo Usuario
 class Usuario(db.Model):
     __tablename__ = 'general_dim_usuario'
@@ -83,6 +92,9 @@ class Usuario(db.Model):
 
     # ✅ Relación con Departamentos (Muchos a Muchos)
     departamentos = relationship("Departamento", secondary=ticket_pivot_departamento_agente, back_populates="agentes")
+    
+    # ✅ Relación con Apps (Muchos a Muchos)
+    apps = relationship("App", secondary=usuario_pivot_app_usuario, back_populates="usuarios")
 
 # 🔹 Modelo TicketEstado
 class TicketEstado(db.Model):
@@ -167,4 +179,13 @@ class Departamento(db.Model):
     # ✅ Relación con Tickets
     tickets = relationship("Ticket", back_populates="departamento")
 
-    #fin  
+# 🔹 Modelo App
+class App(db.Model):
+    __tablename__ = 'general_dim_app'
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    nombre = db.Column(db.String(45), nullable=False)
+    descripcion = db.Column(db.String(100), nullable=True)
+    URL = db.Column(db.String(100), nullable=True)
+    
+    # Relación con usuarios a través de la tabla pivot
+    usuarios = relationship("Usuario", secondary=usuario_pivot_app_usuario, back_populates="apps")

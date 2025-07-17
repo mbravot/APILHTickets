@@ -46,29 +46,12 @@ SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_DISPLAY_NAME = os.getenv("SMTP_DISPLAY_NAME", "Sistema de Tickets")
 
-# Verificar valores cargados
-logging.info("Verificando variables de entorno:")
-logging.info(f"SMTP_USUARIO: {SMTP_USUARIO}")
-logging.info(f"SMTP_SERVER: {SMTP_SERVER}")
-logging.info(f"SMTP_PORT: {SMTP_PORT}")
-logging.info(f"SMTP_DISPLAY_NAME: {SMTP_DISPLAY_NAME}")
-logging.info(f"SMTP_CLAVE: {'OK' if SMTP_CLAVE else 'FALTA'}")
-
 def enviar_correo(destinatario, asunto, cuerpo):
     try:
         # Verificar que todas las variables necesarias estén presentes
         if not all([SMTP_SERVER, SMTP_PORT, SMTP_USUARIO, SMTP_CLAVE]):
             logging.error("Faltan variables de entorno necesarias para el envío de correo")
-            logging.error(f"SMTP_SERVER: {'OK' if SMTP_SERVER else 'FALTA'}")
-            logging.error(f"SMTP_PORT: {'OK' if SMTP_PORT else 'FALTA'}")
-            logging.error(f"SMTP_USUARIO: {'OK' if SMTP_USUARIO else 'FALTA'}")
-            logging.error(f"SMTP_CLAVE: {'OK' if SMTP_CLAVE else 'FALTA'}")
             return False
-
-        logging.info(f"Intentando enviar correo a {destinatario}")
-        logging.info(f"Usando servidor: {SMTP_SERVER}:{SMTP_PORT}")
-        logging.info(f"Usuario SMTP: {SMTP_USUARIO}")
-        logging.info(f"Display Name: {SMTP_DISPLAY_NAME}")
 
         # Crear mensaje
         msg = MIMEMultipart()
@@ -78,19 +61,14 @@ def enviar_correo(destinatario, asunto, cuerpo):
         msg.attach(MIMEText(cuerpo, 'html'))
 
         # Conectar al servidor SMTP usando TLS (STARTTLS)
-        logging.info("Conectando al servidor SMTP (TLS/STARTTLS)...")
         try:
             with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=60) as server:
-                server.set_debuglevel(1)
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
                 smtp_clave = SMTP_CLAVE.strip()
-                logging.info("Intentando login con usuario y contraseña limpios")
                 server.login(SMTP_USUARIO, smtp_clave)
-                logging.info("Login exitoso, enviando mensaje...")
                 server.send_message(msg)
-                logging.info("Mensaje enviado exitosamente")
         except smtplib.SMTPAuthenticationError as e:
             logging.error(f"Error de autenticación: {str(e)}")
             logging.error("Asegúrate de:")
@@ -132,7 +110,6 @@ def enviar_correo(destinatario, asunto, cuerpo):
             logging.error("Traceback completo:")
             logging.error(traceback.format_exc())
             return False
-        logging.info(f"Correo enviado exitosamente a {destinatario}")
         return True
     except Exception as e:
         logging.error(f"Error general al enviar correo: {str(e)}")
