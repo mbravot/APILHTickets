@@ -54,8 +54,8 @@ def verificar_acceso_app(usuario_id, app_id):
 # Función de notificación por correo
 def notificar_creacion_ticket(ticket, usuario, agente):
     try:
-        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
-        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        agente_nombre = agente.nombre_completo if agente else "Sin asignar"
+        usuario_nombre = usuario.nombre_completo
         sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
         sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
         
@@ -89,8 +89,8 @@ def notificar_creacion_ticket(ticket, usuario, agente):
 # Función para notificar cambio de estado
 def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
     try:
-        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
-        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        agente_nombre = agente.nombre_completo if agente else "Sin asignar"
+        usuario_nombre = usuario.nombre_completo
         sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
         sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
@@ -120,8 +120,8 @@ def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
 # Función para notificar cierre de ticket
 def notificar_cierre_ticket(ticket, usuario, agente):
     try:
-        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
-        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        agente_nombre = agente.nombre_completo if agente else "Sin asignar"
+        usuario_nombre = usuario.nombre_completo
         sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
         sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
@@ -150,8 +150,8 @@ def notificar_cierre_ticket(ticket, usuario, agente):
 # Función para notificar nuevo comentario
 def notificar_comentario(ticket, usuario, agente, comentario):
     try:
-        agente_nombre = agente.colaborador_obj.nombre if agente and agente.colaborador_obj else agente.correo if agente else "Sin asignar"
-        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        agente_nombre = agente.nombre_completo if agente else "Sin asignar"
+        usuario_nombre = usuario.nombre_completo
         sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
         sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
@@ -182,9 +182,9 @@ def notificar_comentario(ticket, usuario, agente, comentario):
 # Función para notificar reasignación de ticket
 def notificar_reasignacion_ticket(ticket, usuario, agente_anterior, agente_nuevo):
     try:
-        agente_anterior_nombre = agente_anterior.colaborador_obj.nombre if agente_anterior and agente_anterior.colaborador_obj else agente_anterior.correo if agente_anterior else "Ninguno"
-        agente_nuevo_nombre = agente_nuevo.colaborador_obj.nombre if agente_nuevo.colaborador_obj else agente_nuevo.correo
-        usuario_nombre = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.correo
+        agente_anterior_nombre = agente_anterior.nombre_completo if agente_anterior else "Ninguno"
+        agente_nuevo_nombre = agente_nuevo.nombre_completo
+        usuario_nombre = usuario.nombre_completo
         sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
         sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
@@ -284,14 +284,12 @@ def get_tickets():
                 "id_usuario": ticket.id_usuario,
                 "id_agente": ticket.id_agente,
                 "usuario": (
-                    ticket.usuario.colaborador_obj.nombre
-                    if ticket.usuario and ticket.usuario.colaborador_obj
-                    else ticket.usuario.usuario if ticket.usuario else "Sin usuario"
+                    ticket.usuario.nombre_completo
+                    if ticket.usuario else "Sin usuario"
                 ),
                 "agente": (
-                    ticket.agente.colaborador_obj.nombre
-                    if ticket.agente and ticket.agente.colaborador_obj
-                    else ticket.agente.usuario if ticket.agente else "Sin asignar"
+                    ticket.agente.nombre_completo
+                    if ticket.agente else "Sin asignar"
                 ),
                 "estado": ticket.estado.nombre,
                 "prioridad": ticket.prioridad.nombre,
@@ -326,9 +324,8 @@ def get_ticket(id):
             'id_ticket': c.id_ticket,
             'id_usuario': c.id_usuario,
             'usuario': (
-                Usuario.query.get(c.id_usuario).colaborador_obj.nombre
-                if Usuario.query.get(c.id_usuario) and Usuario.query.get(c.id_usuario).colaborador_obj
-                else Usuario.query.get(c.id_usuario).usuario if Usuario.query.get(c.id_usuario) else None
+                Usuario.query.get(c.id_usuario).nombre_completo
+                if Usuario.query.get(c.id_usuario) else None
             ),
             'comentario': c.comentario,
             'creado': c.timestamp.strftime('%Y-%m-%d %H:%M:%S') if c.timestamp else None
@@ -345,14 +342,12 @@ def get_ticket(id):
         "id_usuario": ticket.id_usuario,
         "id_agente": ticket.id_agente,
         "usuario": (
-            ticket.usuario.colaborador_obj.nombre
-            if ticket.usuario and ticket.usuario.colaborador_obj
-            else ticket.usuario.usuario if ticket.usuario else None
+            ticket.usuario.nombre_completo
+            if ticket.usuario else "Sin usuario"
         ),
         "agente": (
-            ticket.agente.colaborador_obj.nombre
-            if ticket.agente and ticket.agente.colaborador_obj
-            else ticket.agente.usuario if ticket.agente else None
+            ticket.agente.nombre_completo
+            if ticket.agente else "Sin asignar"
         ),
         "estado": ticket.estado.nombre if ticket.estado else None,
         "prioridad": ticket.prioridad.nombre if ticket.prioridad else None,
@@ -639,20 +634,9 @@ def register():
             'message': 'Usuario registrado exitosamente',
             'usuario': {
                 'id': usuario_creado.id,
-                'nombre': usuario_creado.colaborador_obj.nombre if usuario_creado.colaborador_obj else usuario_creado.usuario,
+                'nombre': usuario_creado.nombre_completo,
                 'correo': usuario_creado.correo,
-                'rol': usuario_creado.rol_obj.nombre,
-                'sucursal_activa': {
-                    'id': usuario_creado.sucursal_obj.id,
-                    'nombre': usuario_creado.sucursal_obj.nombre
-                },
-                'sucursales_autorizadas': [
-                    {
-                        'id': sucursal.id,
-                        'nombre': sucursal.nombre
-                    } for sucursal in usuario_creado.sucursales_autorizadas
-                ],
-                'estado': usuario_creado.estado_obj.nombre
+                'rol': usuario_creado.rol_obj.nombre
             }
         }), 201
     except Exception as e:
@@ -707,7 +691,7 @@ def login():
             'refresh_token': refresh_token,
             'usuario': {
                 'id': usuario.id,
-                'nombre': usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
+                'nombre': usuario.nombre_completo,
                 'correo': usuario.correo,
                 'id_rol': usuario.id_rol,
                 'rol': rol,
@@ -747,9 +731,8 @@ def get_ticket_comentarios(ticket_id):
                 'id_ticket': c.id_ticket,
                 'id_usuario': c.id_usuario,
                 'usuario': (
-                    Usuario.query.get(c.id_usuario).colaborador_obj.nombre
-                    if Usuario.query.get(c.id_usuario) and Usuario.query.get(c.id_usuario).colaborador_obj
-                    else Usuario.query.get(c.id_usuario).usuario if Usuario.query.get(c.id_usuario) else None
+                    Usuario.query.get(c.id_usuario).nombre_completo
+                    if Usuario.query.get(c.id_usuario) else None
                 ),
                 'comentario': c.comentario,
                 'creado': c.timestamp.strftime('%Y-%m-%d %H:%M:%S') if c.timestamp else None
@@ -860,7 +843,7 @@ def get_agentes():
         return jsonify([
             {
                 'id': a.id,
-                'nombre': a.colaborador_obj.nombre if a.colaborador_obj else a.usuario
+                'nombre': a.nombre_completo
             }
             for a in agentes
         ]), 200
@@ -918,7 +901,7 @@ def get_usuarios():
 
         usuario_list = [{
             "id": usuario.id,
-            "nombre": usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
+            "nombre": usuario.nombre_completo,
             "correo": usuario.correo,
             "rol": usuario.rol_obj.nombre,
             "sucursal_activa": {
@@ -996,7 +979,7 @@ def update_usuario(user_id):
             'message': 'Usuario actualizado correctamente',
             'usuario': {
                 'id': usuario_actualizado.id,
-                'nombre': usuario_actualizado.colaborador_obj.nombre if usuario_actualizado.colaborador_obj else usuario_actualizado.usuario,
+                'nombre': usuario_actualizado.nombre_completo,
                 'correo': usuario_actualizado.correo,
                 'rol': usuario_actualizado.rol_obj.nombre,
                 'sucursal_activa': {
@@ -1223,9 +1206,8 @@ def get_agentes_por_departamento(id_departamento):
 
         agentes_list = [{
             'id': a.id,
-            'nombre': (
-                a.colaborador_obj.nombre if a.colaborador_obj else a.usuario
-            )
+            'nombre': a.nombre_completo,
+            'correo': a.correo
         } for a in agentes]
 
         print(f"✅ Agentes encontrados: {agentes_list}")
@@ -1291,11 +1273,15 @@ def get_agentes_departamentos():
 
         agentes_list = [
             {
-                "id": agente.id,
-                "nombre": agente.colaborador_obj.nombre if agente.colaborador_obj else agente.usuario,
-                "departamentos": [d.nombre for d in agente.departamentos]
-            }
-            for agente in agentes
+                'id': agente.id,
+                'nombre': agente.nombre_completo,
+                'departamentos': [
+                    {
+                        'id': d.id,
+                        'nombre': d.nombre
+                    } for d in agente.departamentos
+                ]
+            } for agente in agentes
         ]
 
         return jsonify(agentes_list), 200
@@ -1430,7 +1416,7 @@ def get_agentes_agrupados_por_sucursal():
                 agentes_por_sucursal[sucursal] = []
             agentes_por_sucursal[sucursal].append({
                 "id": agente.id,
-                "nombre": agente.colaborador_obj.nombre if agente.colaborador_obj else agente.usuario,
+                "nombre": agente.nombre_completo,
                 "correo": agente.correo
             })
 
@@ -1551,7 +1537,7 @@ def get_usuarios_con_apps():
             } for app in usuario.apps]
             
             # Obtener el nombre completo para ordenamiento
-            nombre_usuario = usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario
+            nombre_usuario = usuario.nombre_completo
             
             usuarios_apps.append({
                 'id': usuario.id,
@@ -1623,7 +1609,7 @@ def asignar_apps_a_usuario(user_id):
             'message': 'Apps asignadas correctamente',
             'usuario': {
                 'id': usuario.id,
-                'nombre': usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
+                'nombre': usuario.nombre_completo,
                 'correo': usuario.correo,
                 'apps': apps_actualizadas
             }
@@ -1653,7 +1639,7 @@ def get_apps_de_usuario(user_id):
         return jsonify({
             'usuario': {
                 'id': usuario.id,
-                'nombre': usuario.colaborador_obj.nombre if usuario.colaborador_obj else usuario.usuario,
+                'nombre': usuario.nombre_completo,
                 'correo': usuario.correo,
                 'rol': usuario.rol_obj.nombre
             },

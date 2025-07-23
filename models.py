@@ -15,7 +15,8 @@ class Colaborador(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     apellido_paterno = db.Column(db.String(45), nullable=False)
     apellido_materno = db.Column(db.String(45), nullable=True)
-    usuarios = db.relationship('Usuario', backref='colaborador_obj')
+    # Removido el backref para evitar conflicto
+    usuarios = db.relationship('Usuario', back_populates='colaborador_obj')
 
 # 🔹 Tabla intermedia para la relación muchos a muchos entre Agentes y Departamentos
 ticket_pivot_departamento_agente = Table(
@@ -31,6 +32,14 @@ class Estado(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), nullable=False)
     usuarios = db.relationship('Usuario', back_populates='estado_obj')
+
+# 🔹 Modelo Perfil de Usuario
+class PerfilUsuario(db.Model):
+    __tablename__ = 'usuario_dim_perfil'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(50), nullable=False)
+    descripcion = db.Column(db.String(255), nullable=True)
+    usuarios = db.relationship('Usuario', backref='perfil_obj')
 
 # 🔹 Modelo Sucursal
 class Sucursal(db.Model):
@@ -71,19 +80,24 @@ usuario_pivot_app_usuario = Table(
 class Usuario(db.Model):
     __tablename__ = 'general_dim_usuario'
     id = db.Column(String(45), primary_key=True)
-    id_colaborador = db.Column(Integer, ForeignKey('general_dim_colaborador.id'), nullable=True)
+    id_colaborador = db.Column(String(45), ForeignKey('general_dim_colaborador.id'), nullable=True)
     id_sucursalactiva = db.Column(Integer, ForeignKey('general_dim_sucursal.id'), nullable=False)
     usuario = db.Column(db.String(45), nullable=False)
+    nombre = db.Column(db.String(45), nullable=False)
+    apellido_paterno = db.Column(db.String(45), nullable=False)
+    apellido_materno = db.Column(db.String(45), nullable=True)
     clave = db.Column(db.String(255), nullable=False)
     fecha_creacion = db.Column(Date, nullable=False)
-    id_estado = db.Column(Integer, ForeignKey('general_dim_estado.id'), nullable=False)
+    id_estado = db.Column(Integer, ForeignKey('general_dim_estado.id'), nullable=False, default=1)
     correo = db.Column(db.String(100), nullable=False)
-    id_rol = db.Column(Integer, ForeignKey('ticket_dim_rol.id'), nullable=False)
+    id_rol = db.Column(Integer, ForeignKey('ticket_dim_rol.id'), nullable=False, default=3)
+    id_perfil = db.Column(Integer, ForeignKey('usuario_dim_perfil.id'), nullable=False, default=1)
 
     # ✅ Relaciones corregidas
     rol_obj = db.relationship('Rol', back_populates='usuarios')
     sucursal_obj = db.relationship('Sucursal', back_populates='usuarios', foreign_keys=[id_sucursalactiva])
-    estado_obj = db.relationship('Estado', back_populates='usuarios')  
+    estado_obj = db.relationship('Estado', back_populates='usuarios')
+    colaborador_obj = db.relationship('Colaborador', back_populates='usuarios')
     
     # ✅ Nueva relación para sucursales autorizadas
     sucursales_autorizadas = relationship("Sucursal", 
@@ -95,6 +109,12 @@ class Usuario(db.Model):
     
     # ✅ Relación con Apps (Muchos a Muchos)
     apps = relationship("App", secondary=usuario_pivot_app_usuario, back_populates="usuarios")
+    
+    # ✅ Método para obtener nombre completo
+    @property
+    def nombre_completo(self):
+        apellido_materno = f" {self.apellido_materno}" if self.apellido_materno else ""
+        return f"{self.nombre} {self.apellido_paterno}{apellido_materno}".strip()
 
 # 🔹 Modelo TicketEstado
 class TicketEstado(db.Model):
