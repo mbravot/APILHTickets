@@ -1193,34 +1193,6 @@ Content-Type: application/json
 
 ---
 
-## 👥 Colaboradores
-
-### Obtener Colaboradores
-**GET** `/colaboradores`
-
-Obtiene la lista de colaboradores (solo administradores).
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Respuesta exitosa (200):**
-```json
-[
-  {
-    "id": 1,
-    "nombre_completo": "Juan Pérez González"
-  },
-  {
-    "id": 2,
-    "nombre_completo": "María García López"
-  }
-]
-```
-
----
-
 ## 🔐 Roles
 
 ### Obtener Roles

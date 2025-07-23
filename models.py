@@ -8,16 +8,6 @@ db = SQLAlchemy()
 
 CHILE_TZ = pytz.timezone('America/Santiago')  
 
-# 🔹 Modelo Colaborador
-class Colaborador(db.Model):
-    __tablename__ = 'general_dim_colaborador'
-    id = db.Column(Integer, primary_key=True)
-    nombre = db.Column(db.String(100), nullable=False)
-    apellido_paterno = db.Column(db.String(45), nullable=False)
-    apellido_materno = db.Column(db.String(45), nullable=True)
-    # Removido el backref para evitar conflicto
-    usuarios = db.relationship('Usuario', back_populates='colaborador_obj')
-
 # 🔹 Tabla intermedia para la relación muchos a muchos entre Agentes y Departamentos
 ticket_pivot_departamento_agente = Table(
     'ticket_pivot_departamento_agente',
@@ -80,7 +70,6 @@ usuario_pivot_app_usuario = Table(
 class Usuario(db.Model):
     __tablename__ = 'general_dim_usuario'
     id = db.Column(String(45), primary_key=True)
-    id_colaborador = db.Column(String(45), ForeignKey('general_dim_colaborador.id'), nullable=True)
     id_sucursalactiva = db.Column(Integer, ForeignKey('general_dim_sucursal.id'), nullable=False)
     usuario = db.Column(db.String(45), nullable=False)
     nombre = db.Column(db.String(45), nullable=False)
@@ -97,7 +86,6 @@ class Usuario(db.Model):
     rol_obj = db.relationship('Rol', back_populates='usuarios')
     sucursal_obj = db.relationship('Sucursal', back_populates='usuarios', foreign_keys=[id_sucursalactiva])
     estado_obj = db.relationship('Estado', back_populates='usuarios')
-    colaborador_obj = db.relationship('Colaborador', back_populates='usuarios')
     
     # ✅ Nueva relación para sucursales autorizadas
     sucursales_autorizadas = relationship("Sucursal", 

@@ -2,7 +2,10 @@ import os
 import time
 import uuid
 from flask import Blueprint, request, jsonify
-from models import Rol, db, Ticket, Usuario, TicketEstado, TicketPrioridad, Departamento, TicketComentario, Sucursal, ticket_pivot_departamento_agente, Colaborador, Categoria, usuario_pivot_app_usuario
+from models import (db, Usuario, Ticket, TicketComentario, TicketEstado, 
+                   TicketPrioridad, Departamento, Sucursal, Rol, Estado, 
+                   PerfilUsuario, ticket_pivot_departamento_agente, 
+                   usuario_pivot_sucursal_usuario, Categoria, usuario_pivot_app_usuario)
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -607,17 +610,20 @@ def register():
             sucursales_autorizadas.add(data['id_sucursalactiva'])
             print(f"Sucursal activa {data['id_sucursalactiva']} agregada a sucursales autorizadas")
 
-        # Crear nuevo usuario con la nueva estructura
+        # Crear nuevo usuario
         nuevo_usuario = Usuario(
             id=user_id,
-            id_colaborador=data.get('id_colaborador'),  # Opcional
-            id_sucursalactiva=data['id_sucursalactiva'],
             usuario=data['usuario'],
+            nombre=data['nombre'],
+            apellido_paterno=data['apellido_paterno'],
+            apellido_materno=data.get('apellido_materno'),
+            correo=data['correo'],
             clave=hashed_password,
             fecha_creacion=datetime.now().date(),
-            id_estado=1,  # Activo por defecto
-            correo=data['correo'],
-            id_rol=data['id_rol']
+            id_rol=data.get('id_rol', 3),
+            id_sucursalactiva=data.get('id_sucursalactiva'),
+            id_estado=data.get('id_estado', 1),
+            id_perfil=data.get('id_perfil', 1)
         )
             
         # Agregar sucursales autorizadas (incluyendo la sucursal activa)
@@ -634,6 +640,7 @@ def register():
             'message': 'Usuario registrado exitosamente',
             'usuario': {
                 'id': usuario_creado.id,
+                'usuario': usuario_creado.usuario,
                 'nombre': usuario_creado.nombre_completo,
                 'correo': usuario_creado.correo,
                 'rol': usuario_creado.rol_obj.nombre
@@ -691,6 +698,7 @@ def login():
             'refresh_token': refresh_token,
             'usuario': {
                 'id': usuario.id,
+                'usuario': usuario.usuario,
                 'nombre': usuario.nombre_completo,
                 'correo': usuario.correo,
                 'id_rol': usuario.id_rol,
@@ -901,6 +909,7 @@ def get_usuarios():
 
         usuario_list = [{
             "id": usuario.id,
+            "usuario": usuario.usuario,
             "nombre": usuario.nombre_completo,
             "correo": usuario.correo,
             "rol": usuario.rol_obj.nombre,
@@ -931,54 +940,76 @@ def get_usuarios():
 @api.route('/usuarios/<user_id>', methods=['PUT'])
 @jwt_required()
 def update_usuario(user_id):
-    current_user_id = get_jwt_identity()
-    usuario = Usuario.query.get(user_id)
-    if not usuario:
-        return jsonify({'message': 'Usuario no encontrado'}), 404
-
-    # Solo permitir que un usuario edite su propio perfil o que un ADMINISTRADOR edite a cualquiera
-    current_user = Usuario.query.get(current_user_id)
-    if current_user.id != user_id and current_user.rol_obj.nombre != 'ADMINISTRADOR':
-        return jsonify({'message': 'No tienes permiso para editar este usuario'}), 403
-
-    data = request.get_json()
-
-    # Actualizar campos básicos
-    if 'nombre' in data:
-        usuario.nombre = data['nombre']
-    if 'correo' in data:
-        usuario.correo = data['correo']
-    if 'clave' in data and data['clave']:
-        usuario.clave = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    if 'id_rol' in data:
-        usuario.id_rol = data['id_rol']
-    if 'id_estado' in data:
-        usuario.id_estado = data['id_estado']
-    if 'id_colaborador' in data:
-        usuario.id_colaborador = data['id_colaborador']
-
-    # Actualizar sucursal activa
-    if 'id_sucursalactiva' in data:
-        # Verificar que la sucursal activa esté en las sucursales autorizadas
-        if 'sucursales_autorizadas' in data and data['id_sucursalactiva'] not in data['sucursales_autorizadas']:
-            return jsonify({'error': 'La sucursal activa debe estar en las sucursales autorizadas'}), 400
-        usuario.id_sucursalactiva = data['id_sucursalactiva']
-
-    # Actualizar sucursales autorizadas
-    if 'sucursales_autorizadas' in data:
-        # Obtener las sucursales de la base de datos
-        sucursales = Sucursal.query.filter(Sucursal.id.in_(data['sucursales_autorizadas'])).all()
-        # Actualizar la relación
-        usuario.sucursales_autorizadas = sucursales
-
     try:
+        current_user_id = get_jwt_identity()
+        usuario = Usuario.query.get(user_id)
+        if not usuario:
+            return jsonify({'message': 'Usuario no encontrado'}), 404
+
+        # Solo permitir que un usuario edite su propio perfil o que un ADMINISTRADOR edite a cualquiera
+        current_user = Usuario.query.get(current_user_id)
+        if current_user.id != user_id and current_user.rol_obj.nombre != 'ADMINISTRADOR':
+            return jsonify({'message': 'No tienes permiso para editar este usuario'}), 403
+
+        data = request.get_json()
+        print(f"🔧 Actualizando usuario {user_id} con datos: {data}")
+
+        # Actualizar campos básicos
+        if 'nombre' in data:
+            usuario.nombre = data['nombre']
+            print(f"✅ Nombre actualizado: {data['nombre']}")
+        if 'apellido_paterno' in data:
+            usuario.apellido_paterno = data['apellido_paterno']
+            print(f"✅ Apellido paterno actualizado: {data['apellido_paterno']}")
+        if 'apellido_materno' in data:
+            usuario.apellido_materno = data['apellido_materno']
+            print(f"✅ Apellido materno actualizado: {data['apellido_materno']}")
+        if 'usuario' in data:
+            usuario.usuario = data['usuario']
+            print(f"✅ Usuario actualizado: {data['usuario']}")
+        if 'correo' in data:
+            usuario.correo = data['correo']
+            print(f"✅ Correo actualizado: {data['correo']}")
+        if 'clave' in data and data['clave']:
+            usuario.clave = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            print("✅ Clave actualizada")
+        if 'id_rol' in data:
+            usuario.id_rol = data['id_rol']
+            print(f"✅ Rol actualizado: {data['id_rol']}")
+        if 'id_estado' in data:
+            usuario.id_estado = data['id_estado']
+            print(f"✅ Estado actualizado: {data['id_estado']}")
+        if 'id_perfil' in data:
+            usuario.id_perfil = data['id_perfil']
+            print(f"✅ Perfil actualizado: {data['id_perfil']}")
+
+        # Actualizar sucursal activa
+        if 'id_sucursalactiva' in data:
+            # Verificar que la sucursal activa esté en las sucursales autorizadas
+            if 'sucursales_autorizadas' in data and data['id_sucursalactiva'] not in data['sucursales_autorizadas']:
+                return jsonify({'error': 'La sucursal activa debe estar en las sucursales autorizadas'}), 400
+            usuario.id_sucursalactiva = data['id_sucursalactiva']
+            print(f"✅ Sucursal activa actualizada: {data['id_sucursalactiva']}")
+
+        # Actualizar sucursales autorizadas
+        if 'sucursales_autorizadas' in data:
+            # Obtener las sucursales de la base de datos
+            sucursales = Sucursal.query.filter(Sucursal.id.in_(data['sucursales_autorizadas'])).all()
+            # Actualizar la relación
+            usuario.sucursales_autorizadas = sucursales
+            print(f"✅ Sucursales autorizadas actualizadas: {[s.id for s in sucursales]}")
+
+        # Commit de los cambios
         db.session.commit()
+        print(f"✅ Cambios guardados en la base de datos")
+
         # Obtener el usuario actualizado para la respuesta
         usuario_actualizado = Usuario.query.get(user_id)
         return jsonify({
             'message': 'Usuario actualizado correctamente',
             'usuario': {
                 'id': usuario_actualizado.id,
+                'usuario': usuario_actualizado.usuario,
                 'nombre': usuario_actualizado.nombre_completo,
                 'correo': usuario_actualizado.correo,
                 'rol': usuario_actualizado.rol_obj.nombre,
@@ -997,7 +1028,9 @@ def update_usuario(user_id):
         }), 200
     except Exception as e:
         db.session.rollback()
-        print(f"Error al guardar cambios: {str(e)}")
+        print(f"❌ Error al actualizar usuario: {str(e)}")
+        import traceback
+        print(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({'error': f'Error al actualizar usuario: {str(e)}'}), 500
 
 # ruta para eliminar un usurio
@@ -1429,21 +1462,6 @@ def get_agentes_agrupados_por_sucursal():
         print(f"🔸 Error en get_agentes_agrupados_por_sucursal: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener los agentes agrupados por sucursal'}), 500
 
-
-@api.route('/colaboradores', methods=['GET'])
-@jwt_required()
-@role_required(['ADMINISTRADOR'])
-def get_colaboradores():
-    try:
-        colaboradores = Colaborador.query.all()
-        lista = [{
-            "id": c.id,
-            "nombre_completo": f"{c.nombre} {c.apellido_paterno} {(c.apellido_materno or '').strip()}".strip()
-        } for c in colaboradores]
-        return jsonify(lista), 200
-    except Exception as e:
-        print(f"Error al obtener colaboradores: {str(e)}")
-        return jsonify({'error': 'Ocurrió un error al obtener los colaboradores'}), 500
 
 # Ruta para obtener categorías por departamento
 @api.route('/categorias', methods=['GET'])
