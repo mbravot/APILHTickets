@@ -20,6 +20,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 from utils import enviar_correo_async, enviar_correo
+from cloud_storage import storage_manager
 import bcrypt
 import hashlib
 from datetime import datetime
@@ -1080,47 +1081,55 @@ def upload_file(id):
     if not allowed_file(file.filename):
         return jsonify({'message': 'Tipo de archivo no permitido'}), 400
 
-    # Asegurar que la carpeta uploads existe
-    upload_folder = 'uploads'
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
-
     # Obtener la lista actual de archivos adjuntos
     archivos_actuales = ticket.adjunto.split(',') if ticket.adjunto else []
 
     # Calcular el hash MD5 del archivo subido
     file_content = file.read()
     file_hash = hashlib.md5(file_content).hexdigest()
-    file.seek(0)  # Volver al inicio para guardar después
+    file.seek(0)  # Volver al inicio para subir después
 
-    # Revisar si ya existe un archivo con el mismo hash
+    # Revisar si ya existe un archivo con el mismo hash en Cloud Storage
     hashes_existentes = set()
     for nombre_archivo in archivos_actuales:
-        ruta_archivo = os.path.join(upload_folder, nombre_archivo)
-        if os.path.exists(ruta_archivo):
-            with open(ruta_archivo, 'rb') as f:
-                hash_existente = hashlib.md5(f.read()).hexdigest()
+        if storage_manager.file_exists(nombre_archivo):
+            # Descargar temporalmente para calcular hash
+            try:
+                blob = storage_manager.bucket.blob(nombre_archivo)
+                content = blob.download_as_bytes()
+                hash_existente = hashlib.md5(content).hexdigest()
                 hashes_existentes.add(hash_existente)
+            except Exception as e:
+                print(f"⚠️ Error al verificar hash de {nombre_archivo}: {str(e)}")
+                continue
+    
     if file_hash in hashes_existentes:
         return jsonify({'message': 'Archivo duplicado, ya existe en el ticket', 'adjunto': ticket.adjunto}), 200
 
-    # Generar un nombre único usando id y UUID
-    file_ext = secure_filename(file.filename).rsplit('.', 1)[1].lower()
-    unique_filename = f"t{id}_{uuid.uuid4().hex}.{file_ext}"
-    file_path = os.path.join(upload_folder, unique_filename)
+    # Subir archivo a Cloud Storage
+    upload_result = storage_manager.upload_file(file, id)
+    
+    if not upload_result['success']:
+        return jsonify({'error': upload_result['error']}), 500
 
-    # Guardar el archivo en el servidor
-    file.save(file_path)
+    filename = upload_result['filename']
+    file_url = upload_result['url']
 
     # Guardar el nombre del archivo en la base de datos
     try:
-        archivos_actuales.append(unique_filename)
+        archivos_actuales.append(filename)
         ticket.adjunto = ','.join(archivos_actuales)
         db.session.commit()
-        print(f"✅ Archivo {unique_filename} guardado en la BD para el ticket {id}")
-        return jsonify({'message': 'Archivo subido correctamente', 'adjunto': ticket.adjunto}), 200
+        print(f"✅ Archivo {filename} subido a Cloud Storage y guardado en la BD para el ticket {id}")
+        return jsonify({
+            'message': 'Archivo subido correctamente', 
+            'adjunto': ticket.adjunto,
+            'url': file_url
+        }), 200
     except Exception as e:
         db.session.rollback()
+        # Intentar eliminar el archivo de Cloud Storage si falló la BD
+        storage_manager.delete_file(filename)
         print(f"🔸 Error al guardar el adjunto en la BD: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al guardar el archivo en la base de datos'}), 500
 
@@ -1138,17 +1147,19 @@ def eliminar_adjunto(id, nombre_adjunto):
     if nombre_adjunto not in archivos_actuales:
         return jsonify({'message': 'Adjunto no encontrado en este ticket'}), 404
 
-    # Eliminar el archivo físico
-    upload_folder = 'uploads'
-    file_path = os.path.join(upload_folder, nombre_adjunto)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    # Eliminar el archivo de Cloud Storage
+    delete_result = storage_manager.delete_file(nombre_adjunto)
+    
+    if not delete_result['success']:
+        print(f"⚠️ Error al eliminar archivo de Cloud Storage: {delete_result['error']}")
+        # Continuar con la eliminación de la BD aunque falle Cloud Storage
 
     # Quitar el adjunto de la lista y actualizar la base de datos
     archivos_actuales.remove(nombre_adjunto)
     ticket.adjunto = ','.join(archivos_actuales)
     try:
         db.session.commit()
+        print(f"✅ Adjunto {nombre_adjunto} eliminado de la BD para el ticket {id}")
         return jsonify({'message': 'Adjunto eliminado correctamente', 'adjunto': ticket.adjunto}), 200
     except Exception as e:
         db.session.rollback()
@@ -1215,11 +1226,14 @@ def cambiar_clave(user_id):
         return jsonify({'error': 'Ocurrió un error al cambiar la clave'}), 500
 
 
-UPLOAD_FOLDER = 'uploads'
-
 @api.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    # Redirigir a la URL de Cloud Storage
+    file_url = storage_manager.get_file_url(filename)
+    if file_url:
+        return jsonify({'url': file_url}), 200
+    else:
+        return jsonify({'error': 'Archivo no encontrado'}), 404
 
 
 # 🔹 **Ruta para obtener agentes por departamento**

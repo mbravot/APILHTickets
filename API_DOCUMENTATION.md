@@ -1238,5 +1238,94 @@ Authorization: Bearer <access_token>
 ```
 
 **Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": 1,
+    "nombre": "ACTIVO"
+  },
+  {
+    "id": 2,
+    "nombre": "INACTIVO"
+  }
+]
 ```
+
+---
+
+## ☁️ **Configuración de Google Cloud Storage**
+
+### **Variables de Entorno Requeridas**
+
+```bash
+# Google Cloud Storage
+GCS_BUCKET_NAME=imagenes-tickets-api
+GCP_PROJECT_ID=gestion-la-hornilla
+
+# Opcional: Ruta a credenciales de servicio (para desarrollo local)
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
 ```
+
+### **Configuración Automática**
+
+La API detecta automáticamente las credenciales de Google Cloud:
+
+1. **En Cloud Run**: Usa las credenciales por defecto del servicio
+2. **En desarrollo local**: Usa el archivo de credenciales especificado en `GOOGLE_APPLICATION_CREDENTIALS`
+
+### **Bucket de Cloud Storage**
+
+- **Nombre del bucket**: `imagenes-tickets-api`
+- **URL base**: `https://storage.googleapis.com/imagenes-tickets-api/`
+- **Acceso**: Público para lectura de imágenes
+
+### **Migración de Archivos Existentes**
+
+Para migrar archivos existentes de la carpeta `uploads` a Cloud Storage:
+
+```bash
+python migrate_to_cloud_storage.py
+```
+
+### **Funcionalidades de Cloud Storage**
+
+#### **Subida de Archivos**
+- Los archivos se suben directamente a Cloud Storage
+- Se generan URLs públicas automáticamente
+- Se mantiene la verificación de duplicados por hash MD5
+
+#### **Eliminación de Archivos**
+- Los archivos se eliminan de Cloud Storage
+- Se mantiene sincronización con la base de datos
+
+#### **Acceso a Archivos**
+- Los archivos son accesibles públicamente via URLs de Cloud Storage
+- No se requiere autenticación para ver las imágenes
+
+### **Ventajas de Cloud Storage**
+
+✅ **Escalabilidad**: Sin límites de almacenamiento local
+✅ **Disponibilidad**: 99.9% de uptime garantizado
+✅ **Rendimiento**: CDN global para acceso rápido
+✅ **Costo**: Solo pagas por lo que usas
+✅ **Seguridad**: Integración nativa con Google Cloud
+✅ **Backup**: Replicación automática de datos
+
+### **Estructura de Archivos en Cloud Storage**
+
+```
+imagenes-tickets-api/
+├── t1_uuid1.jpg          # Imagen del ticket 1
+├── t1_uuid2.png          # Otra imagen del ticket 1
+├── t2_uuid3.jpg          # Imagen del ticket 2
+└── ...
+```
+
+### **URLs de Ejemplo**
+
+```
+https://storage.googleapis.com/imagenes-tickets-api/t1_abc123.jpg
+https://storage.googleapis.com/imagenes-tickets-api/t2_def456.png
+```
+
+---
