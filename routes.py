@@ -1,7 +1,7 @@
 import os
 import time
 import uuid
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect
 from models import (db, Usuario, Ticket, TicketComentario, TicketEstado, 
                    TicketPrioridad, Departamento, Sucursal, Rol, Estado, 
                    PerfilUsuario, ticket_pivot_departamento_agente, 
@@ -1228,10 +1228,10 @@ def cambiar_clave(user_id):
 
 @api.route('/uploads/<filename>')
 def uploaded_file(filename):
-    # Redirigir a la URL de Cloud Storage
+    # Redirigir directamente a la URL de Cloud Storage
     file_url = storage_manager.get_file_url(filename)
     if file_url:
-        return jsonify({'url': file_url}), 200
+        return redirect(file_url, code=302)
     else:
         return jsonify({'error': 'Archivo no encontrado'}), 404
 
