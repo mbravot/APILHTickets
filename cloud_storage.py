@@ -33,7 +33,7 @@ class CloudStorageManager:
             # Intentar usar credenciales por defecto (para Cloud Run)
             self.client = storage.Client(project=self.project_id)
             self.bucket = self.client.bucket(self.bucket_name)
-            logging.info(f"✅ Cliente de Cloud Storage inicializado para bucket: {self.bucket_name}")
+            logging.info(f"Cliente de Cloud Storage inicializado para bucket: {self.bucket_name}")
         except DefaultCredentialsError:
             # Si no hay credenciales por defecto, usar archivo de credenciales
             credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
@@ -42,7 +42,7 @@ class CloudStorageManager:
                     credentials_path, project=self.project_id
                 )
                 self.bucket = self.client.bucket(self.bucket_name)
-                logging.info(f"✅ Cliente de Cloud Storage inicializado con credenciales desde: {credentials_path}")
+                logging.info(f"Cliente de Cloud Storage inicializado con credenciales desde: {credentials_path}")
             else:
                 logging.error("❌ No se encontraron credenciales para Google Cloud Storage")
                 self.client = None
@@ -85,7 +85,7 @@ class CloudStorageManager:
             # Obtener URL pública (sin hacer público individualmente)
             public_url = f"https://storage.googleapis.com/{self.bucket_name}/{filename}"
             
-            logging.info(f"✅ Archivo {filename} subido exitosamente a Cloud Storage")
+            logging.info(f"Archivo {filename} subido exitosamente a Cloud Storage")
             
             return {
                 'success': True,
@@ -130,7 +130,7 @@ class CloudStorageManager:
             # Eliminar el archivo
             blob.delete()
             
-            logging.info(f"✅ Archivo {filename} eliminado exitosamente de Cloud Storage")
+            logging.info(f"Archivo {filename} eliminado exitosamente de Cloud Storage")
             
             return {
                 'success': True,

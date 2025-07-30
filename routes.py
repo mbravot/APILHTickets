@@ -299,6 +299,8 @@ def get_tickets():
                 "prioridad": ticket.prioridad.nombre,
                 "departamento": ticket.departamento.nombre if ticket.departamento else None,
                 "id_departamento": ticket.id_departamento,
+                "id_categoria": ticket.id_categoria,
+                "categoria": ticket.categoria.nombre if ticket.categoria else None,
                 "sucursal": nombre_sucursal,
                 "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
                 "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
@@ -357,6 +359,8 @@ def get_ticket(id):
         "prioridad": ticket.prioridad.nombre if ticket.prioridad else None,
         "departamento": ticket.departamento.nombre if ticket.departamento else None,
         "id_departamento": ticket.id_departamento,
+        "id_categoria": ticket.id_categoria,
+        "categoria": ticket.categoria.nombre if ticket.categoria else None,
         "sucursal": nombre_sucursal,
         "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
         "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
@@ -391,13 +395,27 @@ def create_ticket():
         if not categoria or categoria.id_departamento != id_departamento:
             return jsonify({'error': 'La categoría no pertenece al departamento seleccionado'}), 400
 
-        # ✅ Obtener agentes del departamento
-        agentes = Usuario.query.join(ticket_pivot_departamento_agente).filter(
-            ticket_pivot_departamento_agente.c.id_departamento == id_departamento
-        ).all()
-
-        # ✅ Asignar un agente aleatorio si hay disponibles
-        id_agente = str(random.choice(agentes).id) if agentes else None
+        # ✅ Obtener el agente responsable de la categoría
+        id_agente = None
+        if categoria and categoria.id_usuario:
+            # Verificar que el agente asignado a la categoría pertenece al departamento
+            agente_categoria = Usuario.query.get(categoria.id_usuario)
+            if agente_categoria and agente_categoria.rol_obj.nombre == 'AGENTE':
+                # Verificar que el agente pertenece al departamento
+                agente_en_departamento = db.session.query(ticket_pivot_departamento_agente).filter(
+                    ticket_pivot_departamento_agente.c.id_usuario == categoria.id_usuario,
+                    ticket_pivot_departamento_agente.c.id_departamento == id_departamento
+                ).first()
+                
+                if agente_en_departamento:
+                    id_agente = str(categoria.id_usuario)
+        
+        # Si no hay agente asignado a la categoría, asignar aleatoriamente
+        if not id_agente:
+            agentes = Usuario.query.join(ticket_pivot_departamento_agente).filter(
+                ticket_pivot_departamento_agente.c.id_departamento == id_departamento
+            ).all()
+            id_agente = str(random.choice(agentes).id) if agentes else None
 
         # Obtener el estado "Abierto" y prioridad "Baja" si no se especifican
         estado_abierto = TicketEstado.query.filter_by(nombre="Abierto").first()
@@ -581,7 +599,7 @@ def get_estados():
 def register():
     try:
         data = request.get_json()
-        print("Datos recibidos para registro:", data)  # Log para debug
+        # Log para debug removido
         
         # Validar campos requeridos
         campos_requeridos = ['usuario', 'clave', 'correo', 'id_rol', 'id_sucursalactiva', 'sucursales_autorizadas']
@@ -609,7 +627,7 @@ def register():
         sucursales_autorizadas = set(data['sucursales_autorizadas'])
         if data['id_sucursalactiva'] not in sucursales_autorizadas:
             sucursales_autorizadas.add(data['id_sucursalactiva'])
-            print(f"Sucursal activa {data['id_sucursalactiva']} agregada a sucursales autorizadas")
+            # Log removido
 
         # Crear nuevo usuario
         nuevo_usuario = Usuario(
@@ -630,7 +648,7 @@ def register():
         # Agregar sucursales autorizadas (incluyendo la sucursal activa)
         sucursales = Sucursal.query.filter(Sucursal.id.in_(sucursales_autorizadas)).all()
         nuevo_usuario.sucursales_autorizadas = sucursales
-        print(f"Sucursales autorizadas asignadas: {[s.id for s in sucursales]}")
+        # Log removido
 
         db.session.add(nuevo_usuario)
         db.session.commit()
@@ -809,15 +827,23 @@ def assign_ticket(ticket_id):
 
         # 🔹 Si es Agente, solo puede reasignar a agentes de su departamento
         elif usuario_actual.rol_obj.nombre == "AGENTE":
-            # Obtener los agentes del departamento del ticket
-            agentes_departamento = Usuario.query.join(ticket_pivot_departamento_agente).filter(
+            # Verificar que el agente actual pertenece al departamento del ticket
+            agente_en_departamento = db.session.query(ticket_pivot_departamento_agente).filter(
+                ticket_pivot_departamento_agente.c.id_usuario == current_user_id,
                 ticket_pivot_departamento_agente.c.id_departamento == ticket.id_departamento
-            ).all()
-
-            agentes_permitidos = [str(agente.id) for agente in agentes_departamento]
-
-            if str(nuevo_agente_id) not in agentes_permitidos:
-                return jsonify({'message': 'No puedes reasignar fuera de tu departamento'}), 403
+            ).first()
+            
+            if not agente_en_departamento:
+                return jsonify({'message': 'No tienes permiso para reasignar tickets de este departamento'}), 403
+            
+            # Verificar que el nuevo agente pertenece al mismo departamento
+            nuevo_agente_en_departamento = db.session.query(ticket_pivot_departamento_agente).filter(
+                ticket_pivot_departamento_agente.c.id_usuario == nuevo_agente_id,
+                ticket_pivot_departamento_agente.c.id_departamento == ticket.id_departamento
+            ).first()
+            
+            if not nuevo_agente_en_departamento:
+                return jsonify({'message': 'Solo puedes reasignar a agentes de tu mismo departamento'}), 403
 
             ticket.id_agente = nuevo_agente_id
 
@@ -842,24 +868,107 @@ def assign_ticket(ticket_id):
         return jsonify({'error': 'Ocurrió un error al reasignar el ticket'}), 500
 
 
-# Ruta para obtener un agente (solo Administradores)
+# Ruta para obtener agentes disponibles para reasignación (Agentes y Administradores)
 @api.route('/agentes', methods=['GET'])
 @jwt_required()
-@role_required(['ADMINISTRADOR'])
+@role_required(['ADMINISTRADOR', 'AGENTE'])
 def get_agentes():
     try:
-        agentes = Usuario.query.filter(Usuario.id_rol == Rol.query.filter_by(nombre='Agente').first().id).all()
-        return jsonify([
-            {
-                'id': a.id,
-                'nombre': a.nombre_completo
-            }
-            for a in agentes
-        ]), 200
+        current_user_id = get_jwt_identity()
+        usuario_actual = Usuario.query.get(current_user_id)
+        
+        # Si es administrador, puede ver todos los agentes
+        if usuario_actual.rol_obj.nombre == 'ADMINISTRADOR':
+            agentes = Usuario.query.filter(Usuario.id_rol == Rol.query.filter_by(nombre='AGENTE').first().id).all()
+            return jsonify([
+                {
+                    'id': a.id,
+                    'nombre': a.nombre_completo
+                }
+                for a in agentes
+            ]), 200
+        
+        # Si es agente, solo puede ver agentes de su departamento
+        elif usuario_actual.rol_obj.nombre == 'AGENTE':
+            # Obtener departamentos del agente actual
+            departamentos_agente = db.session.query(ticket_pivot_departamento_agente.c.id_departamento).filter(
+                ticket_pivot_departamento_agente.c.id_usuario == current_user_id
+            ).all()
+            
+            departamentos_ids = [d[0] for d in departamentos_agente]
+            
+            # Obtener agentes que pertenecen a los mismos departamentos
+            agentes = Usuario.query.join(ticket_pivot_departamento_agente).filter(
+                Usuario.id_rol == Rol.query.filter_by(nombre='AGENTE').first().id,
+                ticket_pivot_departamento_agente.c.id_departamento.in_(departamentos_ids)
+            ).distinct().all()
+            
+            return jsonify([
+                {
+                    'id': a.id,
+                    'nombre': a.nombre_completo
+                }
+                for a in agentes
+            ]), 200
+        
+        else:
+            return jsonify({'error': 'No tienes permiso para ver agentes'}), 403
     except Exception as e:
         print(f"🔸 Error en get_agentes: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener la lista de agentes'}), 500
 
+
+# Ruta para obtener agentes disponibles para reasignar tickets (Agentes y Administradores)
+@api.route('/tickets/<int:ticket_id>/agentes-disponibles', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR', 'AGENTE'])
+def get_agentes_disponibles_para_reasignacion(ticket_id):
+    try:
+        current_user_id = get_jwt_identity()
+        usuario_actual = Usuario.query.get(current_user_id)
+        ticket = Ticket.query.get(ticket_id)
+        
+        if not ticket:
+            return jsonify({'error': 'Ticket no encontrado'}), 404
+        
+        # Si es administrador, puede ver todos los agentes del departamento
+        if usuario_actual.rol_obj.nombre == 'ADMINISTRADOR':
+            agentes = Usuario.query.join(ticket_pivot_departamento_agente).filter(
+                Usuario.id_rol == Rol.query.filter_by(nombre='AGENTE').first().id,
+                ticket_pivot_departamento_agente.c.id_departamento == ticket.id_departamento
+            ).all()
+        
+        # Si es agente, verificar que pertenece al departamento del ticket
+        elif usuario_actual.rol_obj.nombre == 'AGENTE':
+            agente_en_departamento = db.session.query(ticket_pivot_departamento_agente).filter(
+                ticket_pivot_departamento_agente.c.id_usuario == current_user_id,
+                ticket_pivot_departamento_agente.c.id_departamento == ticket.id_departamento
+            ).first()
+            
+            if not agente_en_departamento:
+                return jsonify({'error': 'No tienes permiso para ver agentes de este departamento'}), 403
+            
+            # Obtener agentes del mismo departamento
+            agentes = Usuario.query.join(ticket_pivot_departamento_agente).filter(
+                Usuario.id_rol == Rol.query.filter_by(nombre='AGENTE').first().id,
+                ticket_pivot_departamento_agente.c.id_departamento == ticket.id_departamento
+            ).all()
+        
+        else:
+            return jsonify({'error': 'No tienes permiso para ver agentes'}), 403
+        
+        return jsonify([
+            {
+                'id': a.id,
+                'nombre': a.nombre_completo,
+                'correo': a.correo
+            }
+            for a in agentes
+        ]), 200
+        
+    except Exception as e:
+        print(f"Error al obtener agentes disponibles para reasignación: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los agentes disponibles'}), 500
 
 # Ruta para obtener sucursales
 @api.route('/sucursales', methods=['GET'])
@@ -883,6 +992,495 @@ def get_roles():
         print(f"🔸 Error en get_roles: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener los roles'}), 500
 
+# 🔹 Ruta de depuración para ver todos los roles disponibles
+@api.route('/debug/roles', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_roles():
+    try:
+        roles = Rol.query.all()
+        # Logs de debug removidos
+        
+        return jsonify([{
+            'id': r.id, 
+            'nombre': r.nombre,
+            'nombre_upper': r.nombre.upper() if r.nombre else None
+        } for r in roles]), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_roles: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los roles'}), 500
+
+# 🔹 Ruta de depuración para ver agentes y sus departamentos
+@api.route('/debug/agentes-departamentos', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_agentes_departamentos():
+    try:
+        # Obtener todos los usuarios con rol AGENTE
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        agentes = Usuario.query.filter(Usuario.id_rol == rol_agente.id).all()
+        
+        # Logs de debug removidos
+        agentes_info = []
+        
+        for agente in agentes:
+            agentes_info.append({
+                'id': agente.id,
+                'nombre': agente.nombre_completo,
+                'correo': agente.correo,
+                'rol': agente.rol_obj.nombre,
+                'departamentos': [{'id': d.id, 'nombre': d.nombre} for d in agente.departamentos]
+            })
+        
+        return jsonify(agentes_info), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_agentes_departamentos: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener la información de agentes'}), 500
+
+# 🔹 Ruta de depuración para ver información de una categoría específica
+@api.route('/debug/categoria/<categoria_id>', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_categoria(categoria_id):
+    try:
+        categoria = Categoria.query.get(categoria_id)
+        if not categoria:
+            return jsonify({'error': 'Categoría no encontrada'}), 404
+        
+        # Logs de debug removidos
+        
+        return jsonify({
+            'id': categoria.id,
+            'nombre': categoria.nombre,
+            'departamento': {
+                'id': categoria.departamento.id,
+                'nombre': categoria.departamento.nombre
+            },
+            'usuario_responsable': {
+                'id': categoria.usuario_responsable.id,
+                'nombre': categoria.usuario_responsable.nombre_completo
+            } if categoria.usuario_responsable else None
+        }), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_categoria: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener la información de la categoría'}), 500
+
+# 🔹 Ruta de depuración para ver asignaciones de agentes a departamentos
+@api.route('/debug/agentes-departamentos-tabla', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_agentes_departamentos_tabla():
+    try:
+        # Obtener todas las asignaciones de la tabla pivot
+        asignaciones = db.session.query(ticket_pivot_departamento_agente).all()
+        
+        # Logs de debug removidos
+        
+        return jsonify([{
+            'id_usuario': a.id_usuario,
+            'id_departamento': a.id_departamento,
+            'agente_nombre': Usuario.query.get(a.id_usuario).nombre_completo if Usuario.query.get(a.id_usuario) else 'N/A',
+            'departamento_nombre': Departamento.query.get(a.id_departamento).nombre if Departamento.query.get(a.id_departamento) else 'N/A'
+        } for a in asignaciones]), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_agentes_departamentos_tabla: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las asignaciones'}), 500
+
+# 🔹 Ruta de prueba para verificar agentes por departamento
+@api.route('/debug/test-agentes-departamento/<int:departamento_id>', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def test_agentes_por_departamento(departamento_id):
+    try:
+        # Log de debug removido
+        
+        # Obtener el rol AGENTE
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        # Obtener agentes del departamento específico
+        agentes = db.session.query(Usuario).join(
+            ticket_pivot_departamento_agente,
+            Usuario.id == ticket_pivot_departamento_agente.c.id_usuario
+        ).filter(
+            Usuario.id_rol == rol_agente.id,
+            ticket_pivot_departamento_agente.c.id_departamento == departamento_id
+        ).all()
+        
+        # Logs de debug removidos
+        
+        return jsonify([{
+            'id': agente.id,
+            'nombre': agente.nombre_completo,
+            'correo': agente.correo,
+            'rol': agente.rol_obj.nombre
+        } for agente in agentes]), 200
+    except Exception as e:
+        print(f"🔸 Error en test_agentes_por_departamento: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los agentes'}), 500
+
+# 🔹 Ruta para ver todos los departamentos y sus agentes
+@api.route('/debug/departamentos-agentes', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_departamentos_agentes():
+    try:
+        # Obtener todos los departamentos
+        departamentos = Departamento.query.all()
+        
+        # Obtener el rol AGENTE
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        resultado = []
+        
+        for departamento in departamentos:
+            # Log de debug removido
+            
+            # Obtener agentes del departamento
+            agentes = db.session.query(Usuario).join(
+                ticket_pivot_departamento_agente,
+                Usuario.id == ticket_pivot_departamento_agente.c.id_usuario
+            ).filter(
+                Usuario.id_rol == rol_agente.id,
+                ticket_pivot_departamento_agente.c.id_departamento == departamento.id
+            ).all()
+            
+            # Logs de debug removidos
+            
+            resultado.append({
+                'departamento': {
+                    'id': departamento.id,
+                    'nombre': departamento.nombre
+                },
+                'agentes': [{
+                    'id': agente.id,
+                    'nombre': agente.nombre_completo,
+                    'correo': agente.correo
+                } for agente in agentes]
+            })
+        
+        return jsonify(resultado), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_departamentos_agentes: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener la información'}), 500
+
+# 🔹 Ruta para ver todas las categorías y sus departamentos
+@api.route('/debug/categorias-departamentos', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_categorias_departamentos():
+    try:
+        # Obtener todas las categorías
+        categorias = Categoria.query.all()
+        
+        resultado = []
+        
+        for categoria in categorias:
+            # Logs de debug removidos
+            
+            resultado.append({
+                'categoria': {
+                    'id': categoria.id,
+                    'nombre': categoria.nombre
+                },
+                'departamento': {
+                    'id': categoria.departamento.id,
+                    'nombre': categoria.departamento.nombre
+                }
+            })
+        
+        return jsonify(resultado), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_categorias_departamentos: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener la información'}), 500
+
+# 🔹 Ruta para buscar categoría por nombre
+@api.route('/debug/buscar-categoria/<nombre>', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def buscar_categoria_por_nombre(nombre):
+    try:
+        # Buscar categorías que contengan el nombre
+        categorias = Categoria.query.filter(Categoria.nombre.ilike(f'%{nombre}%')).all()
+        
+        resultado = []
+        
+        for categoria in categorias:
+            # Logs de debug removidos
+            
+            resultado.append({
+                'categoria': {
+                    'id': categoria.id,
+                    'nombre': categoria.nombre
+                },
+                'departamento': {
+                    'id': categoria.departamento.id,
+                    'nombre': categoria.departamento.nombre
+                }
+            })
+        
+        return jsonify(resultado), 200
+    except Exception as e:
+        print(f"🔸 Error en buscar_categoria_por_nombre: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al buscar la categoría'}), 500
+
+# 🔹 Ruta para verificar categoría específica por ID
+@api.route('/debug/verificar-categoria/<int:categoria_id>', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def verificar_categoria_especifica(categoria_id):
+    try:
+        categoria = Categoria.query.get(categoria_id)
+        
+        if not categoria:
+            return jsonify({'error': f'Categoría con ID {categoria_id} no encontrada'}), 404
+        
+        # Logs de debug removidos
+        
+        resultado = {
+            'categoria': {
+                'id': categoria.id,
+                'nombre': categoria.nombre
+            },
+            'departamento': {
+                'id': categoria.departamento.id,
+                'nombre': categoria.departamento.nombre
+            }
+        }
+        
+        return jsonify(resultado), 200
+    except Exception as e:
+        print(f"🔸 Error en verificar_categoria_especifica: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al verificar la categoría'}), 500
+
+# 🔹 Ruta para verificar asignaciones de agentes a departamentos
+@api.route('/debug/verificar-asignaciones-agentes', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def verificar_asignaciones_agentes():
+    try:
+        # Log de debug removido
+        
+        # Obtener todos los agentes
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            rol_agente = Rol.query.filter_by(nombre='Agente').first()
+        if not rol_agente:
+            rol_agente = Rol.query.filter_by(nombre='agente').first()
+        
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        agentes = Usuario.query.filter_by(id_rol=rol_agente.id).all()
+        
+        resultado = []
+        
+        for agente in agentes:
+            # Logs de debug removidos
+            
+            # Obtener departamentos asignados directamente de la tabla pivot
+            departamentos_asignados = db.session.query(Departamento).join(
+                ticket_pivot_departamento_agente,
+                Departamento.id == ticket_pivot_departamento_agente.c.id_departamento
+            ).filter(
+                ticket_pivot_departamento_agente.c.id_usuario == agente.id
+            ).all()
+            
+            resultado.append({
+                'agente': {
+                    'id': agente.id,
+                    'nombre': agente.nombre_completo,
+                    'correo': agente.correo
+                },
+                'departamentos': [{
+                    'id': d.id,
+                    'nombre': d.nombre
+                } for d in departamentos_asignados]
+            })
+        
+        # Log de debug removido
+        
+        return jsonify(resultado), 200
+        
+    except Exception as e:
+        print(f"🔸 Error en verificar_asignaciones_agentes: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al verificar las asignaciones'}), 500
+
+# 🔹 Ruta temporal para obtener agentes por departamento (solución al problema del frontend)
+@api.route('/admin/departamentos/<int:departamento_id>/agentes-disponibles', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_agentes_disponibles_por_departamento(departamento_id):
+    try:
+        print(f"🔍 ===== CONSULTA POR DEPARTAMENTO =====")
+        print(f"🔍 Departamento ID: {departamento_id}")
+        
+        # Obtener el departamento
+        departamento = Departamento.query.get(departamento_id)
+        if not departamento:
+            return jsonify({'error': 'Departamento no encontrado'}), 404
+        
+        print(f"🔍 Departamento: {departamento.nombre}")
+        
+        # Obtener el ID del rol AGENTE
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            rol_agente = Rol.query.filter_by(nombre='Agente').first()
+        if not rol_agente:
+            rol_agente = Rol.query.filter_by(nombre='agente').first()
+        
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        # Obtener agentes del departamento
+        agentes_departamento = db.session.query(Usuario).join(
+            ticket_pivot_departamento_agente,
+            Usuario.id == ticket_pivot_departamento_agente.c.id_usuario
+        ).filter(
+            Usuario.id_rol == rol_agente.id,
+            ticket_pivot_departamento_agente.c.id_departamento == departamento_id
+        ).all()
+        
+        print(f"🔍 Agentes encontrados: {len(agentes_departamento)}")
+        for agente in agentes_departamento:
+            print(f"  - {agente.nombre_completo}")
+        
+        # Ordenar alfabéticamente
+        agentes_departamento.sort(key=lambda x: x.nombre_completo.lower())
+        
+        # Crear la respuesta JSON
+        response_data = [{
+            'id': agente.id,
+            'nombre': agente.nombre_completo,
+            'correo': agente.correo,
+            'rol': agente.rol_obj.nombre,
+            'debug_info': {
+                'departamento_id': departamento_id,
+                'departamento_nombre': departamento.nombre
+            }
+        } for agente in agentes_departamento]
+        
+        print(f"🔍 ===== FIN CONSULTA POR DEPARTAMENTO =====")
+        
+        # Crear respuesta con headers para evitar caché
+        response = jsonify(response_data)
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['X-Departamento-ID'] = str(departamento_id)
+        response.headers['X-Departamento-Nombre'] = departamento.nombre
+        
+        return response, 200
+        
+    except Exception as e:
+        print(f"🔸 Error en get_agentes_disponibles_por_departamento: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los agentes'}), 500
+
+# 🔹 Ruta para asignar agentes a departamentos (para testing)
+@api.route('/debug/asignar-agente-departamento/<agente_id>/<int:departamento_id>', methods=['POST'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def asignar_agente_departamento_debug(agente_id, departamento_id):
+    try:
+        print(f"🔍 ===== ASIGNANDO AGENTE A DEPARTAMENTO =====")
+        print(f"🔍 Agente ID: {agente_id}")
+        print(f"🔍 Departamento ID: {departamento_id}")
+        
+        # Verificar que el agente existe
+        agente = Usuario.query.get(agente_id)
+        if not agente:
+            return jsonify({'error': 'Agente no encontrado'}), 404
+        
+        # Verificar que el departamento existe
+        departamento = Departamento.query.get(departamento_id)
+        if not departamento:
+            return jsonify({'error': 'Departamento no encontrado'}), 404
+        
+        print(f"🔍 Agente: {agente.nombre_completo}")
+        print(f"🔍 Departamento: {departamento.nombre}")
+        
+        # Verificar si ya existe la asignación
+        asignacion_existente = db.session.query(ticket_pivot_departamento_agente).filter(
+            ticket_pivot_departamento_agente.c.id_usuario == agente_id,
+            ticket_pivot_departamento_agente.c.id_departamento == departamento_id
+        ).first()
+        
+        if asignacion_existente:
+            return jsonify({'message': 'La asignación ya existe'}), 200
+        
+        # Crear nueva asignación
+        nueva_asignacion = ticket_pivot_departamento_agente.insert().values(
+            id_usuario=agente_id,
+            id_departamento=departamento_id
+        )
+        
+        db.session.execute(nueva_asignacion)
+        db.session.commit()
+        
+        print(f"🔍 Asignación creada exitosamente")
+        print(f"🔍 ===== FIN ASIGNACIÓN =====")
+        
+        return jsonify({'message': 'Agente asignado al departamento exitosamente'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error en asignar_agente_departamento_debug: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al asignar el agente'}), 500
+
+# 🔹 Ruta para verificar y corregir asignaciones de agentes
+@api.route('/debug/corregir-asignaciones-agentes', methods=['POST'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def corregir_asignaciones_agentes():
+    try:
+        print(f"🔍 ===== CORRIGIENDO ASIGNACIONES DE AGENTES =====")
+        
+        # Obtener todos los agentes
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        agentes = Usuario.query.filter_by(id_rol=rol_agente.id).all()
+        
+        # Asignaciones correctas según la imagen
+        asignaciones_correctas = {
+            'baac9a2e-4c8c-4cf9-8545-b93e67628b60': [3],  # Maria Jose Mella -> QUÍMICOS
+            '87934f06-be75-4ad4-9e1b-f6ce07beb363': [3],  # Patricia Marin -> QUÍMICOS
+            '0dd1484f-a2cb-41e9-8ef9-487bf9de0282': [1],  # Teresa Chacan -> CDG Y TI
+            '156df4e0-8f0d-46c5-aa7a-cd92a50409f5': [2],  # Hector Molt -> HOSPITAL
+            '44536470-225c-4e3a-8ac4-5dc6d45b5cf2': [4]   # Miguel Bravo -> OFICINA CENTRAL
+        }
+        
+        # Eliminar todas las asignaciones existentes
+        db.session.execute(ticket_pivot_departamento_agente.delete())
+        db.session.commit()
+        print(f"🔍 Asignaciones existentes eliminadas")
+        
+        # Crear nuevas asignaciones correctas
+        for agente_id, departamentos in asignaciones_correctas.items():
+            for departamento_id in departamentos:
+                nueva_asignacion = ticket_pivot_departamento_agente.insert().values(
+                    id_usuario=agente_id,
+                    id_departamento=departamento_id
+                )
+                db.session.execute(nueva_asignacion)
+                print(f"🔍 Asignado agente {agente_id} al departamento {departamento_id}")
+        
+        db.session.commit()
+        print(f"🔍 ===== ASIGNACIONES CORREGIDAS =====")
+        
+        return jsonify({'message': 'Asignaciones de agentes corregidas exitosamente'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error en corregir_asignaciones_agentes: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al corregir las asignaciones'}), 500
 
 # Ruta para filtrar usuarios activos
 @api.route('/usuarios', methods=['GET'])
@@ -953,36 +1551,36 @@ def update_usuario(user_id):
             return jsonify({'message': 'No tienes permiso para editar este usuario'}), 403
 
         data = request.get_json()
-        print(f"🔧 Actualizando usuario {user_id} con datos: {data}")
+        # Log removido
 
         # Actualizar campos básicos
         if 'nombre' in data:
             usuario.nombre = data['nombre']
-            print(f"✅ Nombre actualizado: {data['nombre']}")
+            # Log removido
         if 'apellido_paterno' in data:
             usuario.apellido_paterno = data['apellido_paterno']
-            print(f"✅ Apellido paterno actualizado: {data['apellido_paterno']}")
+            # Log removido
         if 'apellido_materno' in data:
             usuario.apellido_materno = data['apellido_materno']
-            print(f"✅ Apellido materno actualizado: {data['apellido_materno']}")
+            # Log removido
         if 'usuario' in data:
             usuario.usuario = data['usuario']
-            print(f"✅ Usuario actualizado: {data['usuario']}")
+            # Log removido
         if 'correo' in data:
             usuario.correo = data['correo']
-            print(f"✅ Correo actualizado: {data['correo']}")
+            # Log removido
         if 'clave' in data and data['clave']:
             usuario.clave = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            print("✅ Clave actualizada")
+            # Log removido
         if 'id_rol' in data:
             usuario.id_rol = data['id_rol']
-            print(f"✅ Rol actualizado: {data['id_rol']}")
+            # Log removido
         if 'id_estado' in data:
             usuario.id_estado = data['id_estado']
-            print(f"✅ Estado actualizado: {data['id_estado']}")
+            # Log removido
         if 'id_perfil' in data:
             usuario.id_perfil = data['id_perfil']
-            print(f"✅ Perfil actualizado: {data['id_perfil']}")
+            # Log removido
 
         # Actualizar sucursal activa
         if 'id_sucursalactiva' in data:
@@ -990,7 +1588,7 @@ def update_usuario(user_id):
             if 'sucursales_autorizadas' in data and data['id_sucursalactiva'] not in data['sucursales_autorizadas']:
                 return jsonify({'error': 'La sucursal activa debe estar en las sucursales autorizadas'}), 400
             usuario.id_sucursalactiva = data['id_sucursalactiva']
-            print(f"✅ Sucursal activa actualizada: {data['id_sucursalactiva']}")
+            # Log removido
 
         # Actualizar sucursales autorizadas
         if 'sucursales_autorizadas' in data:
@@ -998,11 +1596,11 @@ def update_usuario(user_id):
             sucursales = Sucursal.query.filter(Sucursal.id.in_(data['sucursales_autorizadas'])).all()
             # Actualizar la relación
             usuario.sucursales_autorizadas = sucursales
-            print(f"✅ Sucursales autorizadas actualizadas: {[s.id for s in sucursales]}")
+            # Log removido
 
         # Commit de los cambios
         db.session.commit()
-        print(f"✅ Cambios guardados en la base de datos")
+        # Log removido
 
         # Obtener el usuario actualizado para la respuesta
         usuario_actualizado = Usuario.query.get(user_id)
@@ -1120,7 +1718,7 @@ def upload_file(id):
         archivos_actuales.append(filename)
         ticket.adjunto = ','.join(archivos_actuales)
         db.session.commit()
-        print(f"✅ Archivo {filename} subido a Cloud Storage y guardado en la BD para el ticket {id}")
+        print(f"Archivo {filename} subido a Cloud Storage y guardado en la BD para el ticket {id}")
         return jsonify({
             'message': 'Archivo subido correctamente', 
             'adjunto': ticket.adjunto,
@@ -1159,7 +1757,7 @@ def eliminar_adjunto(id, nombre_adjunto):
     ticket.adjunto = ','.join(archivos_actuales)
     try:
         db.session.commit()
-        print(f"✅ Adjunto {nombre_adjunto} eliminado de la BD para el ticket {id}")
+        print(f"Adjunto {nombre_adjunto} eliminado de la BD para el ticket {id}")
         return jsonify({'message': 'Adjunto eliminado correctamente', 'adjunto': ticket.adjunto}), 200
     except Exception as e:
         db.session.rollback()
@@ -1257,7 +1855,7 @@ def get_agentes_por_departamento(id_departamento):
             'correo': a.correo
         } for a in agentes]
 
-        print(f"✅ Agentes encontrados: {agentes_list}")
+        print(f"Agentes encontrados: {agentes_list}")
         return jsonify(agentes_list), 200
 
     except Exception as e:
@@ -1487,10 +2085,281 @@ def get_categorias_por_departamento():
             return jsonify({'error': 'Se requiere el ID del departamento'}), 400
 
         categorias = Categoria.query.filter_by(id_departamento=departamento_id).all()
-        return jsonify([{'id': c.id, 'nombre': c.nombre} for c in categorias]), 200
+        return jsonify([{
+            'id': c.id, 
+            'nombre': c.nombre,
+            'id_usuario': c.id_usuario,
+            'usuario_responsable': c.usuario_responsable.nombre_completo if c.usuario_responsable else None
+        } for c in categorias]), 200
     except Exception as e:
         print(f"🔸 Error en get_categorias_por_departamento: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener las categorías'}), 500
+
+# ✅ ADMINISTRADOR: Obtener todas las categorías con usuarios asignados
+@api.route('/admin/categorias', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_all_categorias():
+    try:
+        categorias = Categoria.query.all()
+        return jsonify([{
+            'id': c.id,
+            'nombre': c.nombre,
+            'id_departamento': c.id_departamento,
+            'departamento': c.departamento.nombre,
+            'id_usuario': c.id_usuario,
+            'usuario_responsable': c.usuario_responsable.nombre_completo if c.usuario_responsable else None
+        } for c in categorias]), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener todas las categorías: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener las categorías'}), 500
+
+# ✅ ADMINISTRADOR: Crear nueva categoría
+@api.route('/admin/categorias', methods=['POST'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def crear_categoria():
+    try:
+        data = request.get_json()
+        nombre = data.get('nombre')
+        id_departamento = data.get('id_departamento')
+        id_usuario = data.get('id_usuario')  # Opcional
+        
+        if not nombre or not id_departamento:
+            return jsonify({'error': 'Se requiere nombre y departamento'}), 400
+        
+        # Verificar que el departamento existe
+        departamento = Departamento.query.get(id_departamento)
+        if not departamento:
+            return jsonify({'error': 'Departamento no encontrado'}), 404
+        
+        # Si se asigna un usuario, verificar que pertenece al departamento
+        if id_usuario:
+            usuario = Usuario.query.get(id_usuario)
+            if not usuario:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            
+            # Verificar que el usuario pertenece al departamento
+            usuario_en_departamento = db.session.query(ticket_pivot_departamento_agente).filter(
+                ticket_pivot_departamento_agente.c.id_usuario == id_usuario,
+                ticket_pivot_departamento_agente.c.id_departamento == id_departamento
+            ).first()
+            
+            if not usuario_en_departamento:
+                return jsonify({'error': 'El usuario debe pertenecer al departamento de la categoría'}), 400
+        
+        # Generar ID único para la categoría
+        import uuid
+        categoria_id = str(uuid.uuid4())
+        
+        nueva_categoria = Categoria(
+            id=categoria_id,
+            nombre=nombre,
+            id_departamento=id_departamento,
+            id_usuario=id_usuario
+        )
+        
+        db.session.add(nueva_categoria)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Categoría creada exitosamente',
+            'categoria': {
+                'id': nueva_categoria.id,
+                'nombre': nueva_categoria.nombre,
+                'id_departamento': nueva_categoria.id_departamento,
+                'departamento': nueva_categoria.departamento.nombre,
+                'id_usuario': nueva_categoria.id_usuario,
+                'usuario_responsable': nueva_categoria.usuario_responsable.nombre_completo if nueva_categoria.usuario_responsable else None
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al crear categoría: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al crear la categoría'}), 500
+
+# ✅ ADMINISTRADOR: Editar categoría
+@api.route('/admin/categorias/<categoria_id>', methods=['PUT'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def editar_categoria(categoria_id):
+    try:
+        categoria = Categoria.query.get(categoria_id)
+        if not categoria:
+            return jsonify({'error': 'Categoría no encontrada'}), 404
+        
+        data = request.get_json()
+        nombre = data.get('nombre')
+        id_departamento = data.get('id_departamento')
+        id_usuario = data.get('id_usuario')
+        
+        if nombre:
+            categoria.nombre = nombre
+        
+        if id_departamento:
+            # Verificar que el departamento existe
+            departamento = Departamento.query.get(id_departamento)
+            if not departamento:
+                return jsonify({'error': 'Departamento no encontrado'}), 404
+            categoria.id_departamento = id_departamento
+        
+        if id_usuario is not None:  # Permite asignar None para quitar usuario
+            if id_usuario:
+                usuario = Usuario.query.get(id_usuario)
+                if not usuario:
+                    return jsonify({'error': 'Usuario no encontrado'}), 404
+                
+                # Verificar que el usuario pertenece al departamento
+                usuario_en_departamento = db.session.query(ticket_pivot_departamento_agente).filter(
+                    ticket_pivot_departamento_agente.c.id_usuario == id_usuario,
+                    ticket_pivot_departamento_agente.c.id_departamento == categoria.id_departamento
+                ).first()
+                
+                if not usuario_en_departamento:
+                    return jsonify({'error': 'El usuario debe pertenecer al departamento de la categoría'}), 400
+            
+            categoria.id_usuario = id_usuario
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Categoría actualizada exitosamente',
+            'categoria': {
+                'id': categoria.id,
+                'nombre': categoria.nombre,
+                'id_departamento': categoria.id_departamento,
+                'departamento': categoria.departamento.nombre,
+                'id_usuario': categoria.id_usuario,
+                'usuario_responsable': categoria.usuario_responsable.nombre_completo if categoria.usuario_responsable else None
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al editar categoría: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al editar la categoría'}), 500
+
+# ✅ ADMINISTRADOR: Eliminar categoría
+@api.route('/admin/categorias/<categoria_id>', methods=['DELETE'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def eliminar_categoria(categoria_id):
+    try:
+        categoria = Categoria.query.get(categoria_id)
+        if not categoria:
+            return jsonify({'error': 'Categoría no encontrada'}), 404
+        
+        # Verificar si hay tickets usando esta categoría
+        tickets_con_categoria = Ticket.query.filter_by(id_categoria=categoria_id).count()
+        if tickets_con_categoria > 0:
+            return jsonify({'error': f'No se puede eliminar la categoría porque tiene {tickets_con_categoria} ticket(s) asociado(s)'}), 400
+        
+        db.session.delete(categoria)
+        db.session.commit()
+        
+        return jsonify({'message': 'Categoría eliminada exitosamente'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"🔸 Error al eliminar categoría: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al eliminar la categoría'}), 500
+
+# ✅ ADMINISTRADOR: Obtener agentes disponibles para asignar a categoría
+@api.route('/admin/categorias/<categoria_id>/agentes-disponibles', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_agentes_disponibles_para_categoria(categoria_id):
+    try:
+        categoria = Categoria.query.get(categoria_id)
+        if not categoria:
+            return jsonify({'error': 'Categoría no encontrada'}), 404
+        
+        # Obtener el ID del rol AGENTE
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            rol_agente = Rol.query.filter_by(nombre='Agente').first()
+        if not rol_agente:
+            rol_agente = Rol.query.filter_by(nombre='agente').first()
+        
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        # Obtener agentes que pertenecen al departamento de la categoría
+        agentes_departamento = db.session.query(Usuario).join(
+            ticket_pivot_departamento_agente,
+            Usuario.id == ticket_pivot_departamento_agente.c.id_usuario
+        ).join(
+            Rol,
+            Usuario.id_rol == Rol.id
+        ).filter(
+            ticket_pivot_departamento_agente.c.id_departamento == categoria.id_departamento,
+            Rol.nombre == 'AGENTE'
+        ).all()
+        
+        # Ordenar alfabéticamente
+        agentes_departamento.sort(key=lambda x: x.nombre_completo.lower())
+        
+        return jsonify([{
+            'id': agente.id,
+            'nombre': agente.nombre_completo,
+            'correo': agente.correo,
+            'rol': agente.rol_obj.nombre
+        } for agente in agentes_departamento]), 200
+        
+    except Exception as e:
+        print(f"Error al obtener agentes disponibles para categoría: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los agentes disponibles'}), 500
+
+# 🔹 Ruta de debug para verificar la función completa
+@api.route('/debug/agentes-categoria-completo/<categoria_id>', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_agentes_categoria_completo(categoria_id):
+    try:
+        categoria = Categoria.query.get(categoria_id)
+        if not categoria:
+            return jsonify({'error': 'Categoría no encontrada'}), 404
+        
+        # Obtener el rol AGENTE
+        rol_agente = Rol.query.filter_by(nombre='AGENTE').first()
+        if not rol_agente:
+            return jsonify({'error': 'Rol AGENTE no encontrado'}), 404
+        
+        # Obtener agentes del departamento
+        agentes = db.session.query(Usuario).join(
+            ticket_pivot_departamento_agente,
+            Usuario.id == ticket_pivot_departamento_agente.c.id_usuario
+        ).filter(
+            Usuario.id_rol == rol_agente.id,
+            ticket_pivot_departamento_agente.c.id_departamento == categoria.id_departamento
+        ).all()
+        
+        # Crear respuesta detallada
+        response_data = {
+            'categoria': {
+                'id': categoria.id,
+                'nombre': categoria.nombre,
+                'departamento_id': categoria.id_departamento,
+                'departamento_nombre': categoria.departamento.nombre
+            },
+            'rol_agente': {
+                'id': rol_agente.id,
+                'nombre': rol_agente.nombre
+            },
+            'agentes_encontrados': len(agentes),
+            'agentes': [{
+                'id': agente.id,
+                'nombre': agente.nombre_completo,
+                'correo': agente.correo,
+                'rol': agente.rol_obj.nombre
+            } for agente in agentes]
+        }
+        
+        return jsonify(response_data), 200
+    except Exception as e:
+        print(f"🔸 Error en debug_agentes_categoria_completo: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener la información'}), 500
 
 # Ruta para obtener apps disponibles
 @api.route('/apps', methods=['GET'])

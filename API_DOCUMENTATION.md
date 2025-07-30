@@ -108,6 +108,8 @@ Authorization: Bearer <access_token>
     "prioridad": "Baja",
     "departamento": "TI",
     "id_departamento": 1,
+    "id_categoria": "uuid-categoria-1",
+    "categoria": "Hardware",
     "sucursal": "SANTA VICTORIA",
     "fecha_creacion": "2024-01-15 10:30:00",
     "fecha_cierre": null,
@@ -142,6 +144,8 @@ Authorization: Bearer <access_token>
   "prioridad": "Baja",
   "departamento": "TI",
   "id_departamento": 1,
+  "id_categoria": "uuid-categoria-1",
+  "categoria": "Hardware",
   "sucursal": "SANTA VICTORIA",
   "fecha_creacion": "2024-01-15 10:30:00",
   "fecha_cierre": null,
@@ -165,6 +169,11 @@ Authorization: Bearer <access_token>
 **POST** `/tickets`
 
 Crea un nuevo ticket.
+
+**Lógica de Asignación:**
+- ✅ **Asignación por Categoría**: Si la categoría tiene un agente responsable asignado, el ticket se asigna automáticamente a ese agente
+- ✅ **Asignación Aleatoria**: Si la categoría no tiene agente responsable, se asigna aleatoriamente a un agente del departamento
+- ✅ **Validación**: Se verifica que el agente asignado pertenezca al departamento del ticket
 
 **Headers:**
 ```
@@ -698,7 +707,11 @@ Authorization: Bearer <access_token>
 ### Asignar Ticket
 **PUT** `/tickets/{ticket_id}/asignar`
 
-Asigna un agente a un ticket.
+Reasigna un ticket a un agente diferente.
+
+**Permisos:**
+- ✅ **Administradores**: Pueden reasignar a cualquier agente
+- ✅ **Agentes**: Solo pueden reasignar a agentes de su mismo departamento
 
 **Headers:**
 ```
@@ -720,6 +733,37 @@ Content-Type: application/json
 }
 ```
 
+**Errores posibles:**
+- `403`: No tienes permiso para reasignar tickets de este departamento
+- `403`: Solo puedes reasignar a agentes de tu mismo departamento
+- `400`: El usuario seleccionado no es un Agente
+- `404`: Ticket no encontrado
+
+### Obtener Agentes Disponibles para Reasignación
+**GET** `/tickets/{ticket_id}/agentes-disponibles`
+
+Obtiene la lista de agentes disponibles para reasignar un ticket específico.
+
+**Permisos:**
+- ✅ **Administradores**: Pueden ver todos los agentes del departamento del ticket
+- ✅ **Agentes**: Solo pueden ver agentes de su mismo departamento
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": "12345678-1234-1234-1234-123456789012",
+    "nombre": "Juan Pérez González",
+    "correo": "juan.perez@lahornilla.cl"
+  }
+]
+```
+
 ### Obtener Agentes por Departamento
 **GET** `/departamentos/{id_departamento}/agentes`
 
@@ -736,6 +780,30 @@ Authorization: Bearer <access_token>
   {
     "id": "12345678-1234-1234-1234-123456789012",
     "nombre": "Juan Pérez"
+  }
+]
+```
+
+### Obtener Todos los Agentes
+**GET** `/agentes`
+
+Obtiene la lista de agentes según el rol del usuario.
+
+**Permisos:**
+- ✅ **Administradores**: Pueden ver todos los agentes del sistema
+- ✅ **Agentes**: Solo pueden ver agentes de sus departamentos asignados
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": "12345678-1234-1234-1234-123456789012",
+    "nombre": "Juan Pérez González"
   }
 ]
 ```
@@ -1089,7 +1157,7 @@ Content-Type: application/json
 ### Obtener Categorías por Departamento
 **GET** `/categorias?departamento_id={id}`
 
-Obtiene las categorías de un departamento específico.
+Obtiene las categorías de un departamento específico, incluyendo información del usuario responsable.
 
 **Headers:**
 ```
@@ -1100,15 +1168,187 @@ Authorization: Bearer <access_token>
 ```json
 [
   {
-    "id": 1,
-    "nombre": "Hardware"
+    "id": "uuid-categoria-1",
+    "nombre": "Hardware",
+    "id_usuario": "user123",
+    "usuario_responsable": "Juan Pérez González"
   },
   {
-    "id": 2,
-    "nombre": "Software"
+    "id": "uuid-categoria-2",
+    "nombre": "Software",
+    "id_usuario": null,
+    "usuario_responsable": null
   }
 ]
 ```
+
+---
+
+## 🔧 **ADMINISTRADOR: Gestión de Categorías**
+
+### Obtener Todas las Categorías
+**GET** `/admin/categorias`
+
+Obtiene todas las categorías con información completa (solo administradores).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": "uuid-categoria-1",
+    "nombre": "Hardware",
+    "id_departamento": 1,
+    "departamento": "TI",
+    "id_usuario": "user123",
+    "usuario_responsable": "Juan Pérez González"
+  }
+]
+```
+
+### Crear Nueva Categoría
+**POST** `/admin/categorias`
+
+Crea una nueva categoría con usuario responsable opcional (solo administradores).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "nombre": "Nueva Categoría",
+  "id_departamento": 1,
+  "id_usuario": "user123"
+}
+```
+
+**Notas:**
+- `id_usuario` es opcional
+- El usuario asignado debe pertenecer al departamento de la categoría
+- Se genera automáticamente un UUID único para el ID
+
+**Respuesta exitosa (201):**
+```json
+{
+  "message": "Categoría creada exitosamente",
+  "categoria": {
+    "id": "uuid-generado",
+    "nombre": "Nueva Categoría",
+    "id_departamento": 1,
+    "departamento": "TI",
+    "id_usuario": "user123",
+    "usuario_responsable": "Juan Pérez González"
+  }
+}
+```
+
+### Editar Categoría
+**PUT** `/admin/categorias/{categoria_id}`
+
+Edita una categoría existente (solo administradores).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "nombre": "Categoría Actualizada",
+  "id_departamento": 2,
+  "id_usuario": "user456"
+}
+```
+
+**Notas:**
+- Todos los campos son opcionales
+- Para quitar un usuario asignado, enviar `"id_usuario": null`
+- El usuario asignado debe pertenecer al departamento de la categoría
+
+**Respuesta exitosa (200):**
+```json
+{
+  "message": "Categoría actualizada exitosamente",
+  "categoria": {
+    "id": "uuid-categoria-1",
+    "nombre": "Categoría Actualizada",
+    "id_departamento": 2,
+    "departamento": "RRHH",
+    "id_usuario": "user456",
+    "usuario_responsable": "María García López"
+  }
+}
+```
+
+### Eliminar Categoría
+**DELETE** `/admin/categorias/{categoria_id}`
+
+Elimina una categoría (solo administradores).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Notas:**
+- No se puede eliminar una categoría que tenga tickets asociados
+
+**Respuesta exitosa (200):**
+```json
+{
+  "message": "Categoría eliminada exitosamente"
+}
+```
+
+**Error (400):**
+```json
+{
+  "error": "No se puede eliminar la categoría porque tiene 5 ticket(s) asociado(s)"
+}
+```
+
+### Obtener Agentes Disponibles para Categoría
+**GET** `/admin/categorias/{categoria_id}/agentes-disponibles`
+
+Obtiene los agentes que pueden ser asignados a una categoría (solo administradores).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": "user123",
+    "nombre": "Juan Pérez González",
+    "correo": "juan.perez@lahornilla.cl",
+    "rol": "AGENTE"
+  },
+  {
+    "id": "user456",
+    "nombre": "María García López",
+    "correo": "maria.garcia@lahornilla.cl",
+    "rol": "AGENTE"
+  }
+]
+```
+
+**Notas:**
+- Solo muestra agentes (usuarios con rol AGENTE) que pertenecen al departamento de la categoría
+- Los agentes están ordenados alfabéticamente por nombre
+- Solo se muestran usuarios con rol AGENTE, no administradores ni usuarios regulares
 
 ---
 

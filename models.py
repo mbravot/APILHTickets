@@ -125,12 +125,14 @@ class TicketPrioridad(db.Model):
 # 🔹 Modelo Categoria
 class Categoria(db.Model):
     __tablename__ = 'ticket_dim_categoria'
-    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    id = db.Column(String(45), primary_key=True)
     nombre = db.Column(String(100), nullable=False)
     id_departamento = db.Column(Integer, ForeignKey('general_dim_departamento.id'), nullable=False)
+    id_usuario = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=True)
     
     # Relaciones
     departamento = db.relationship('Departamento', back_populates='categorias')
+    usuario_responsable = db.relationship('Usuario', foreign_keys=[id_usuario], backref='categorias_responsable')
 
 # 🔹 Modelo Ticket
 class Ticket(db.Model):
@@ -142,7 +144,7 @@ class Ticket(db.Model):
     id_estado = db.Column(Integer, ForeignKey('ticket_dim_estado.id'), nullable=False)
     id_prioridad = db.Column(Integer, ForeignKey('ticket_dim_prioridad.id'), nullable=False)
     id_departamento = db.Column(Integer, ForeignKey('general_dim_departamento.id'), nullable=False)
-    id_categoria = db.Column(Integer, ForeignKey('ticket_dim_categoria.id'), nullable=False)
+    id_categoria = db.Column(String(45), ForeignKey('ticket_dim_categoria.id'), nullable=False)
     titulo = db.Column(String(255), nullable=False)
     descripcion = db.Column(Text, nullable=False)
     fecha_creacion = db.Column(DateTime, nullable=False, default=datetime.now)
