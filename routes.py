@@ -443,7 +443,6 @@ def create_ticket():
         return jsonify({'message': 'Ticket creado exitosamente', 'ticket_id': nuevo_ticket.id}), 201
 
     except Exception as e:
-        print(f"🔸 Error en create_ticket: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al crear el ticket'}), 500
 
 # Extensiones permitidas
@@ -812,10 +811,32 @@ def assign_ticket(ticket_id):
             return jsonify({'message': 'Ticket no encontrado'}), 404
 
         data = request.get_json()
-        nuevo_agente_id = data.get('id_agente')
+        # ✅ Aceptar tanto 'id_agente' como 'agente_id' para compatibilidad
+        nuevo_agente_id = data.get('id_agente') or data.get('agente_id')
         nuevo_agente = Usuario.query.get(nuevo_agente_id)
 
-        if not nuevo_agente or nuevo_agente.rol_obj.nombre != 'AGENTE':
+        # ✅ Validación del rol de agente
+        if not nuevo_agente:
+            return jsonify({'message': 'Usuario no encontrado'}), 400
+        
+        # Verificar que el usuario tenga rol de agente
+        rol_es_agente = False
+        
+        # Verificar por ID de rol (2 = AGENTE)
+        if nuevo_agente.id_rol == 2:
+            rol_es_agente = True
+        
+        # Verificar por nombre de rol (más flexible)
+        elif nuevo_agente.rol_obj and nuevo_agente.rol_obj.nombre:
+            rol_nombre = nuevo_agente.rol_obj.nombre.upper()
+            if 'AGENTE' in rol_nombre:
+                rol_es_agente = True
+        
+        # Si no es agente, verificar si es administrador (puede reasignar)
+        elif nuevo_agente.id_rol == 1 or (nuevo_agente.rol_obj and 'ADMIN' in nuevo_agente.rol_obj.nombre.upper()):
+            rol_es_agente = True
+        
+        if not rol_es_agente:
             return jsonify({'message': 'El usuario seleccionado no es un Agente'}), 400
 
         # Guardar el agente anterior antes de reasignar
@@ -864,9 +885,31 @@ def assign_ticket(ticket_id):
         return jsonify({'message': 'Ticket reasignado correctamente'}), 200
     except Exception as e:
         db.session.rollback()
-        print(f"🔸 Error en assign_ticket: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al reasignar el ticket'}), 500
 
+
+# Ruta de debug para verificar roles de usuarios
+@api.route('/debug/usuarios-roles', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def debug_usuarios_roles():
+    try:
+        usuarios = Usuario.query.all()
+        usuarios_info = []
+        
+        for usuario in usuarios:
+            usuarios_info.append({
+                'id': usuario.id,
+                'nombre': usuario.nombre_completo,
+                'id_rol': usuario.id_rol,
+                'rol_nombre': usuario.rol_obj.nombre if usuario.rol_obj else 'Sin rol',
+                'correo': usuario.correo,
+                'es_agente': usuario.id_rol == 2 or (usuario.rol_obj and 'AGENTE' in usuario.rol_obj.nombre.upper())
+            })
+        
+        return jsonify(usuarios_info), 200
+    except Exception as e:
+        return jsonify({'error': 'Error al obtener información de usuarios'}), 500
 
 # Ruta para obtener agentes disponibles para reasignación (Agentes y Administradores)
 @api.route('/agentes', methods=['GET'])
@@ -914,7 +957,6 @@ def get_agentes():
         else:
             return jsonify({'error': 'No tienes permiso para ver agentes'}), 403
     except Exception as e:
-        print(f"🔸 Error en get_agentes: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener la lista de agentes'}), 500
 
 
@@ -967,7 +1009,6 @@ def get_agentes_disponibles_para_reasignacion(ticket_id):
         ]), 200
         
     except Exception as e:
-        print(f"Error al obtener agentes disponibles para reasignación: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener los agentes disponibles'}), 500
 
 # Ruta para obtener sucursales
@@ -1551,36 +1592,26 @@ def update_usuario(user_id):
             return jsonify({'message': 'No tienes permiso para editar este usuario'}), 403
 
         data = request.get_json()
-        # Log removido
 
         # Actualizar campos básicos
         if 'nombre' in data:
             usuario.nombre = data['nombre']
-            # Log removido
         if 'apellido_paterno' in data:
             usuario.apellido_paterno = data['apellido_paterno']
-            # Log removido
         if 'apellido_materno' in data:
             usuario.apellido_materno = data['apellido_materno']
-            # Log removido
         if 'usuario' in data:
             usuario.usuario = data['usuario']
-            # Log removido
         if 'correo' in data:
             usuario.correo = data['correo']
-            # Log removido
         if 'clave' in data and data['clave']:
             usuario.clave = bcrypt.hashpw(data['clave'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            # Log removido
         if 'id_rol' in data:
             usuario.id_rol = data['id_rol']
-            # Log removido
         if 'id_estado' in data:
             usuario.id_estado = data['id_estado']
-            # Log removido
         if 'id_perfil' in data:
             usuario.id_perfil = data['id_perfil']
-            # Log removido
 
         # Actualizar sucursal activa
         if 'id_sucursalactiva' in data:
@@ -1588,7 +1619,6 @@ def update_usuario(user_id):
             if 'sucursales_autorizadas' in data and data['id_sucursalactiva'] not in data['sucursales_autorizadas']:
                 return jsonify({'error': 'La sucursal activa debe estar en las sucursales autorizadas'}), 400
             usuario.id_sucursalactiva = data['id_sucursalactiva']
-            # Log removido
 
         # Actualizar sucursales autorizadas
         if 'sucursales_autorizadas' in data:
@@ -1596,11 +1626,9 @@ def update_usuario(user_id):
             sucursales = Sucursal.query.filter(Sucursal.id.in_(data['sucursales_autorizadas'])).all()
             # Actualizar la relación
             usuario.sucursales_autorizadas = sucursales
-            # Log removido
 
         # Commit de los cambios
         db.session.commit()
-        # Log removido
 
         # Obtener el usuario actualizado para la respuesta
         usuario_actualizado = Usuario.query.get(user_id)

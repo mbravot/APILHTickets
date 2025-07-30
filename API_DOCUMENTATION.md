@@ -726,6 +726,8 @@ Content-Type: application/json
 }
 ```
 
+**Nota:** También acepta `agente_id` como campo alternativo para compatibilidad con el frontend.
+
 **Respuesta exitosa (200):**
 ```json
 {
