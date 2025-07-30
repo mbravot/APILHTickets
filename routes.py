@@ -2420,7 +2420,7 @@ def get_all_apps():
         print(f"🔸 Error al obtener todas las apps: {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener las apps'}), 500
 
-# ✅ ADMINISTRADOR: Obtener usuarios con sus apps asignadas
+# ✅ ADMINISTRADOR: Obtener usuarios con sus apps asignadas (versión completa)
 @api.route('/admin/usuarios-apps', methods=['GET'])
 @jwt_required()
 @role_required(['ADMINISTRADOR'])
@@ -2455,6 +2455,39 @@ def get_usuarios_con_apps():
         return jsonify(usuarios_apps), 200
     except Exception as e:
         print(f"🔸 Error al obtener usuarios con apps: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los usuarios con apps'}), 500
+
+# ✅ ADMINISTRADOR: Obtener usuarios con apps (versión optimizada para frontend)
+@api.route('/admin/usuarios/apps', methods=['GET'])
+@jwt_required()
+@role_required(['ADMINISTRADOR'])
+def get_usuarios_apps_optimizado():
+    try:
+        usuarios = Usuario.query.all()
+        usuarios_apps = []
+        
+        for usuario in usuarios:
+            # Solo incluir información esencial para optimizar la respuesta
+            apps_usuario = [{
+                'id': app.id, 
+                'nombre': app.nombre
+            } for app in usuario.apps]
+            
+            usuarios_apps.append({
+                'id': usuario.id,
+                'nombre': usuario.nombre_completo,
+                'correo': usuario.correo,
+                'rol': usuario.rol_obj.nombre,
+                'estado': usuario.estado_obj.nombre,
+                'apps': apps_usuario
+            })
+        
+        # Ordenar alfabéticamente por nombre
+        usuarios_apps.sort(key=lambda x: x['nombre'].lower())
+        
+        return jsonify(usuarios_apps), 200
+    except Exception as e:
+        print(f"🔸 Error al obtener usuarios con apps (optimizado): {str(e)}")
         return jsonify({'error': 'Ocurrió un error al obtener los usuarios con apps'}), 500
 
 # ✅ ADMINISTRADOR: Asignar apps a un usuario

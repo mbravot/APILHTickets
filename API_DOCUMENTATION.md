@@ -965,10 +965,67 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### Obtener Usuarios con Apps
+### Obtener Usuarios con Apps (Versión Completa)
 **GET** `/admin/usuarios-apps`
 
 Obtiene todos los usuarios con sus apps asignadas (ordenados alfabéticamente).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": "44536470-225c-4e3a-8ac4-5dc6d45b5cf2",
+    "nombre": "MIGUEL",
+    "correo": "mbravo@lahornilla.cl",
+    "rol": "AGENTE",
+    "estado": "Activo",
+    "apps": [
+      {
+        "id": 1,
+        "nombre": "Sistema de Tickets",
+        "descripcion": "Sistema para gestión de tickets de soporte",
+        "url": "https://tickets.lahornilla.cl"
+      }
+    ]
+  }
+]
+```
+
+### Obtener Usuarios con Apps (Versión Optimizada)
+**GET** `/admin/usuarios/apps`
+
+Obtiene todos los usuarios con sus apps asignadas en formato optimizado para el frontend.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+[
+  {
+    "id": "44536470-225c-4e3a-8ac4-5dc6d45b5cf2",
+    "nombre": "MIGUEL",
+    "correo": "mbravo@lahornilla.cl",
+    "rol": "AGENTE",
+    "estado": "Activo",
+    "apps": [
+      {
+        "id": 1,
+        "nombre": "Sistema de Tickets"
+      }
+    ]
+  }
+]
+```
+
+**Nota:** Esta versión optimizada incluye solo información esencial de las apps (id y nombre) para reducir el tamaño de la respuesta y mejorar el rendimiento.
 
 **Headers:**
 ```
