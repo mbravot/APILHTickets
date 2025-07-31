@@ -2724,6 +2724,115 @@ def eliminar_app(app_id):
         print(f"🔸 Error al eliminar app: {str(e)}")
         return jsonify({'error': f'Error al eliminar la app: {str(e)}'}), 500
 
+@api.route('/tickets/mi-departamento', methods=['GET'])
+@jwt_required()
+@role_required(['AGENTE'])
+@app_required(1)
+def get_tickets_mi_departamento():
+    """Endpoint para agentes: ver tickets de su departamento asignado"""
+    try:
+        current_user_id = get_jwt_identity()
+        usuario = Usuario.query.get(current_user_id)
 
+        if not usuario:
+            return jsonify({"error": "Usuario no encontrado"}), 404
 
- 
+        # Obtener los departamentos asignados al agente
+        departamentos_ids = [d.id for d in usuario.departamentos]
+        
+        # Agentes ven tickets de sus departamentos asignados
+        tickets = Ticket.query.filter(
+            Ticket.id_departamento.in_(departamentos_ids)
+        ).order_by(Ticket.fecha_creacion.desc()).all()
+
+        ticket_list = []
+        for ticket in tickets:
+            sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+            nombre_sucursal = sucursal_obj.nombre if sucursal_obj else "No asignada"
+            ticket_list.append({
+                "id": ticket.id,
+                "titulo": ticket.titulo,
+                "descripcion": ticket.descripcion,
+                "id_usuario": ticket.id_usuario,
+                "id_agente": ticket.id_agente,
+                "usuario": (
+                    ticket.usuario.nombre_completo
+                    if ticket.usuario else "Sin usuario"
+                ),
+                "agente": (
+                    ticket.agente.nombre_completo
+                    if ticket.agente else "Sin asignar"
+                ),
+                "estado": ticket.estado.nombre,
+                "prioridad": ticket.prioridad.nombre,
+                "departamento": ticket.departamento.nombre if ticket.departamento else None,
+                "id_departamento": ticket.id_departamento,
+                "id_categoria": ticket.id_categoria,
+                "categoria": ticket.categoria.nombre if ticket.categoria else None,
+                "sucursal": nombre_sucursal,
+                "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
+                "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
+                "adjunto": ticket.adjunto,
+                "id_prioridad": ticket.id_prioridad,
+                "id_estado": ticket.id_estado
+            })
+
+        return jsonify(ticket_list), 200
+
+    except Exception as e:
+        print(f"🔸 Error en get_tickets_mi_departamento: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener los tickets de mi departamento'}), 500
+
+@api.route('/tickets/mis-tickets', methods=['GET'])
+@jwt_required()
+@role_required(['AGENTE'])
+@app_required(1)
+def get_mis_tickets():
+    """Endpoint para agentes: ver tickets que ELLOS crearon (independiente del departamento)"""
+    try:
+        current_user_id = get_jwt_identity()
+        usuario = Usuario.query.get(current_user_id)
+
+        if not usuario:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        # Agentes ven SOLO los tickets que ELLOS crearon
+        tickets = Ticket.query.filter_by(id_usuario=current_user_id).order_by(Ticket.fecha_creacion.desc()).all()
+
+        ticket_list = []
+        for ticket in tickets:
+            sucursal_obj = Sucursal.query.get(ticket.id_sucursal)
+            nombre_sucursal = sucursal_obj.nombre if sucursal_obj else "No asignada"
+            ticket_list.append({
+                "id": ticket.id,
+                "titulo": ticket.titulo,
+                "descripcion": ticket.descripcion,
+                "id_usuario": ticket.id_usuario,
+                "id_agente": ticket.id_agente,
+                "usuario": (
+                    ticket.usuario.nombre_completo
+                    if ticket.usuario else "Sin usuario"
+                ),
+                "agente": (
+                    ticket.agente.nombre_completo
+                    if ticket.agente else "Sin asignar"
+                ),
+                "estado": ticket.estado.nombre,
+                "prioridad": ticket.prioridad.nombre,
+                "departamento": ticket.departamento.nombre if ticket.departamento else None,
+                "id_departamento": ticket.id_departamento,
+                "id_categoria": ticket.id_categoria,
+                "categoria": ticket.categoria.nombre if ticket.categoria else None,
+                "sucursal": nombre_sucursal,
+                "fecha_creacion": ticket.fecha_creacion.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_creacion else None,
+                "fecha_cierre": ticket.fecha_cierre.astimezone(CHILE_TZ).strftime('%Y-%m-%d %H:%M:%S') if ticket.fecha_cierre else None,
+                "adjunto": ticket.adjunto,
+                "id_prioridad": ticket.id_prioridad,
+                "id_estado": ticket.id_estado
+            })
+
+        return jsonify(ticket_list), 200
+
+    except Exception as e:
+        print(f"🔸 Error en get_mis_tickets: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al obtener mis tickets'}), 500
