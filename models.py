@@ -147,7 +147,7 @@ class Ticket(db.Model):
     id_categoria = db.Column(String(45), ForeignKey('ticket_dim_categoria.id'), nullable=False)
     titulo = db.Column(String(255), nullable=False)
     descripcion = db.Column(Text, nullable=False)
-    fecha_creacion = db.Column(DateTime, nullable=False, default=datetime.now)
+    fecha_creacion = db.Column(DateTime, nullable=False, default=lambda: datetime.now(CHILE_TZ))
     fecha_cierre = db.Column(DateTime, nullable=True)
     adjunto = db.Column(String(255), nullable=True)
 
