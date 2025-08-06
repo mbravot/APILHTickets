@@ -575,7 +575,7 @@ def get_prioridades():
 @jwt_required()
 def get_departamentos():
     try:
-        departamentos = Departamento.query.all()
+        departamentos = Departamento.query.order_by(Departamento.nombre).all()
         return jsonify([{'id': d.id, 'nombre': d.nombre} for d in departamentos]), 200
     except Exception as e:
         print(f"🔸 Error en get_departamentos: {str(e)}")
@@ -2112,7 +2112,7 @@ def get_categorias_por_departamento():
         if not departamento_id:
             return jsonify({'error': 'Se requiere el ID del departamento'}), 400
 
-        categorias = Categoria.query.filter_by(id_departamento=departamento_id).all()
+        categorias = Categoria.query.filter_by(id_departamento=departamento_id).order_by(Categoria.nombre).all()
         return jsonify([{
             'id': c.id, 
             'nombre': c.nombre,
@@ -2129,7 +2129,7 @@ def get_categorias_por_departamento():
 @role_required(['ADMINISTRADOR'])
 def get_all_categorias():
     try:
-        categorias = Categoria.query.all()
+        categorias = Categoria.query.order_by(Categoria.nombre).all()
         return jsonify([{
             'id': c.id,
             'nombre': c.nombre,
