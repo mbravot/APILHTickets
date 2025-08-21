@@ -122,7 +122,7 @@ def notificar_cambio_estado(ticket, usuario, agente, nuevo_estado):
         print(f"Error en notificar_cambio_estado: {str(e)}")
 
 # Función para notificar cierre de ticket
-def notificar_cierre_ticket(ticket, usuario, agente):
+def notificar_cierre_ticket(ticket, usuario, agente, comentario_cierre=''):
     try:
         agente_nombre = agente.nombre_completo if agente else "Sin asignar"
         usuario_nombre = usuario.nombre_completo
@@ -130,6 +130,8 @@ def notificar_cierre_ticket(ticket, usuario, agente):
         sucursal_nombre = sucursal_obj.nombre if sucursal_obj else "No asignada"
 
         asunto = f"Ticket {ticket.id} Cerrado"
+        
+        # Construir el cuerpo del correo
         cuerpo = f"""
         <h1>Ticket Cerrado</h1>
         <p>El ticket con los siguientes detalles ha sido cerrado:</p>
@@ -140,11 +142,20 @@ def notificar_cierre_ticket(ticket, usuario, agente):
             <li><strong>Creado por:</strong> {usuario_nombre}</li>
             <li><strong>Sucursal:</strong> {sucursal_nombre}</li>
             <li><strong>Agente asignado:</strong> {agente_nombre}</li>
-        </ul>
+        </ul>"""
+        
+        # Agregar comentario de cierre si existe
+        if comentario_cierre:
+            cuerpo += f"""
+        <h3>Comentario de cierre:</h3>
+        <blockquote>{comentario_cierre}</blockquote>"""
+        
+        cuerpo += f"""
         <p>Por favor, revisa el sistema para más detalles.</p>
         <p>https://tickets.lahornilla.cl/</p>
         <p>Departamento de TI La Hornilla.</p>
         """
+        
         enviar_correo_async(usuario.correo, asunto, cuerpo)
         if agente:
             enviar_correo_async(agente.correo, asunto, cuerpo)
@@ -1814,16 +1825,31 @@ def cerrar_ticket(id):
     if not estado_cerrado:
         return jsonify({'message': 'No se encontró el estado "Cerrado"'}), 500
 
+    # Obtener el comentario de cierre del request
+    data = request.get_json()
+    comentario_cierre = data.get('comentario_cierre', '')
+    current_user = get_jwt_identity()
+
     ticket.id_estado = estado_cerrado.id
     ticket.fecha_cierre = datetime.now(CHILE_TZ)
 
     try:
         db.session.commit()
 
-         # Notificar cierre del ticket
+        # Agregar comentario de cierre si se proporciona
+        if comentario_cierre:
+            nuevo_comentario = TicketComentario(
+                id_ticket=id,
+                id_usuario=current_user,
+                comentario=comentario_cierre
+            )
+            db.session.add(nuevo_comentario)
+            db.session.commit()
+
+        # Notificar cierre del ticket (incluyendo el comentario si existe)
         usuario = Usuario.query.get(ticket.id_usuario)
         agente = Usuario.query.get(ticket.id_agente) if ticket.id_agente else None
-        notificar_cierre_ticket(ticket, usuario, agente)
+        notificar_cierre_ticket(ticket, usuario, agente, comentario_cierre)
 
         return jsonify({'message': 'Ticket cerrado correctamente'}), 200
     except Exception as e:
