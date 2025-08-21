@@ -779,6 +779,8 @@ def add_ticket_comentario(ticket_id):
     try:
         data = request.get_json()
         current_user = get_jwt_identity()
+        es_comentario_cierre = data.get('es_comentario_cierre', False)
+        
         nuevo_comentario = TicketComentario(
             id_ticket=ticket_id,
             id_usuario=current_user,
@@ -787,11 +789,14 @@ def add_ticket_comentario(ticket_id):
         db.session.add(nuevo_comentario)
         db.session.commit()
 
-       # Notificar nuevo comentario
-        ticket = Ticket.query.get(ticket_id)
-        usuario = Usuario.query.get(ticket.id_usuario)
-        agente = Usuario.query.get(ticket.id_agente) if ticket.id_agente else None
-        notificar_comentario(ticket, usuario, agente, data.get('comentario'))
+        # Solo enviar correo de comentario si NO es comentario de cierre
+        if not es_comentario_cierre:
+            # Notificar nuevo comentario
+            ticket = Ticket.query.get(ticket_id)
+            usuario = Usuario.query.get(ticket.id_usuario)
+            agente = Usuario.query.get(ticket.id_agente) if ticket.id_agente else None
+            notificar_comentario(ticket, usuario, agente, data.get('comentario'))
+        
         return jsonify({'message': 'Comentario agregado correctamente'}), 201
     except Exception as e:
         print(f"🔸 Error al agregar comentario: {str(e)}")
