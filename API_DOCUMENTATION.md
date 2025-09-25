@@ -316,6 +316,57 @@ Content-Type: application/json
 }
 ```
 
+### Editar Comentario
+**PUT** `/tickets/{ticket_id}/comentarios/{comentario_id}`
+
+Edita un comentario existente de un ticket. Solo el autor del comentario o un administrador pueden editarlo.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "comentario": "Comentario editado con nueva información"
+}
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "message": "Comentario actualizado correctamente"
+}
+```
+
+**Errores posibles:**
+- `400`: El comentario es requerido
+- `403`: No tienes permisos para editar este comentario
+- `404`: Comentario no encontrado
+
+### Eliminar Comentario
+**DELETE** `/tickets/{ticket_id}/comentarios/{comentario_id}`
+
+Elimina un comentario de un ticket. Solo el autor del comentario o un administrador pueden eliminarlo.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "message": "Comentario eliminado correctamente"
+}
+```
+
+**Errores posibles:**
+- `403`: No tienes permisos para eliminar este comentario
+- `404`: Comentario no encontrado
+
 ---
 
 ## 👥 Usuarios

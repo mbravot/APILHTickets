@@ -814,6 +814,89 @@ def add_ticket_comentario(ticket_id):
         return jsonify({'error': 'Ocurrió un error al agregar el comentario'}), 500
 
 
+# Ruta para editar un comentario de un ticket
+@api.route('/tickets/<int:ticket_id>/comentarios/<int:comentario_id>', methods=['PUT'])
+@jwt_required()
+@role_required(['USUARIO', 'AGENTE', 'ADMINISTRADOR'])
+def edit_ticket_comentario(ticket_id, comentario_id):
+    try:
+        current_user = get_jwt_identity()
+        data = request.get_json()
+        
+        # Validar que se proporcione el comentario
+        if not data.get('comentario'):
+            return jsonify({'error': 'El comentario es requerido'}), 400
+        
+        # Buscar el comentario
+        comentario = TicketComentario.query.filter_by(
+            id=comentario_id, 
+            id_ticket=ticket_id
+        ).first()
+        
+        if not comentario:
+            return jsonify({'error': 'Comentario no encontrado'}), 404
+        
+        # Verificar que el usuario sea el autor del comentario o tenga permisos de administrador
+        usuario_actual = Usuario.query.get(current_user)
+        if not usuario_actual:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Solo el autor del comentario o un administrador puede editarlo
+        if comentario.id_usuario != current_user and usuario_actual.id_rol != 1:  # 1 = ADMINISTRADOR
+            return jsonify({'error': 'No tienes permisos para editar este comentario'}), 403
+        
+        # Actualizar el comentario
+        comentario.comentario = data.get('comentario')
+        comentario.timestamp = datetime.now(CHILE_TZ)  # Actualizar timestamp
+        
+        db.session.commit()
+        
+        return jsonify({'message': 'Comentario actualizado correctamente'}), 200
+        
+    except Exception as e:
+        print(f"🔸 Error al editar comentario: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Ocurrió un error al editar el comentario'}), 500
+
+
+# Ruta para eliminar un comentario de un ticket
+@api.route('/tickets/<int:ticket_id>/comentarios/<int:comentario_id>', methods=['DELETE'])
+@jwt_required()
+@role_required(['USUARIO', 'AGENTE', 'ADMINISTRADOR'])
+def delete_ticket_comentario(ticket_id, comentario_id):
+    try:
+        current_user = get_jwt_identity()
+        
+        # Buscar el comentario
+        comentario = TicketComentario.query.filter_by(
+            id=comentario_id, 
+            id_ticket=ticket_id
+        ).first()
+        
+        if not comentario:
+            return jsonify({'error': 'Comentario no encontrado'}), 404
+        
+        # Verificar que el usuario sea el autor del comentario o tenga permisos de administrador
+        usuario_actual = Usuario.query.get(current_user)
+        if not usuario_actual:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Solo el autor del comentario o un administrador puede eliminarlo
+        if comentario.id_usuario != current_user and usuario_actual.id_rol != 1:  # 1 = ADMINISTRADOR
+            return jsonify({'error': 'No tienes permisos para eliminar este comentario'}), 403
+        
+        # Eliminar el comentario
+        db.session.delete(comentario)
+        db.session.commit()
+        
+        return jsonify({'message': 'Comentario eliminado correctamente'}), 200
+        
+    except Exception as e:
+        print(f"🔸 Error al eliminar comentario: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Ocurrió un error al eliminar el comentario'}), 500
+
+
 @api.route('/tickets/<int:ticket_id>/asignar', methods=['PUT'])
 @jwt_required()
 @role_required(['ADMINISTRADOR', 'AGENTE'])  # ✅ Permitir también a Agentes
