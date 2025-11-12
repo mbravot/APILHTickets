@@ -10,7 +10,7 @@ os.environ['FLASK_DEBUG'] = '0'
 
 # Configuración SMTP
 os.environ['SMTP_USUARIO'] = 'desarrollo@lahornilla.cl'
-os.environ['SMTP_CLAVE'] = 'ckqlvaqpevpcahro'
+os.environ['SMTP_CLAVE'] = 'qkwtmfbvmjihxkci'
 os.environ['SMTP_SERVER'] = 'smtp.gmail.com'
 os.environ['SMTP_PORT'] = '587'
 os.environ['SMTP_DISPLAY_NAME'] = 'Sistema de Tickets'
