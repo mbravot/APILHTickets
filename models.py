@@ -129,6 +129,7 @@ class Categoria(db.Model):
     nombre = db.Column(String(100), nullable=False)
     id_departamento = db.Column(Integer, ForeignKey('general_dim_departamento.id'), nullable=False)
     id_usuario = db.Column(String(45), ForeignKey('general_dim_usuario.id'), nullable=True)
+    plantilla_descripcion = db.Column(Text, nullable=True)
     
     # Relaciones
     departamento = db.relationship('Departamento', back_populates='categorias')

@@ -1202,7 +1202,8 @@ def debug_categoria(categoria_id):
             'usuario_responsable': {
                 'id': categoria.usuario_responsable.id,
                 'nombre': categoria.usuario_responsable.nombre_completo
-            } if categoria.usuario_responsable else None
+            } if categoria.usuario_responsable else None,
+            'plantilla_descripcion': categoria.plantilla_descripcion
         }), 200
     except Exception as e:
         print(f"🔸 Error en debug_categoria: {str(e)}")
@@ -2231,7 +2232,8 @@ def get_categorias_por_departamento():
             'id': c.id, 
             'nombre': c.nombre,
             'id_usuario': c.id_usuario,
-            'usuario_responsable': c.usuario_responsable.nombre_completo if c.usuario_responsable else None
+            'usuario_responsable': c.usuario_responsable.nombre_completo if c.usuario_responsable else None,
+            'plantilla_descripcion': c.plantilla_descripcion
         } for c in categorias]), 200
     except Exception as e:
         print(f"🔸 Error en get_categorias_por_departamento: {str(e)}")
@@ -2250,7 +2252,8 @@ def get_all_categorias():
             'id_departamento': c.id_departamento,
             'departamento': c.departamento.nombre,
             'id_usuario': c.id_usuario,
-            'usuario_responsable': c.usuario_responsable.nombre_completo if c.usuario_responsable else None
+            'usuario_responsable': c.usuario_responsable.nombre_completo if c.usuario_responsable else None,
+            'plantilla_descripcion': c.plantilla_descripcion
         } for c in categorias]), 200
     except Exception as e:
         print(f"🔸 Error al obtener todas las categorías: {str(e)}")
@@ -2266,6 +2269,7 @@ def crear_categoria():
         nombre = data.get('nombre')
         id_departamento = data.get('id_departamento')
         id_usuario = data.get('id_usuario')  # Opcional
+        plantilla_descripcion = data.get('plantilla_descripcion')  # Opcional
         
         if not nombre or not id_departamento:
             return jsonify({'error': 'Se requiere nombre y departamento'}), 400
@@ -2298,7 +2302,8 @@ def crear_categoria():
             id=categoria_id,
             nombre=nombre,
             id_departamento=id_departamento,
-            id_usuario=id_usuario
+            id_usuario=id_usuario,
+            plantilla_descripcion=plantilla_descripcion
         )
         
         db.session.add(nueva_categoria)
@@ -2312,7 +2317,8 @@ def crear_categoria():
                 'id_departamento': nueva_categoria.id_departamento,
                 'departamento': nueva_categoria.departamento.nombre,
                 'id_usuario': nueva_categoria.id_usuario,
-                'usuario_responsable': nueva_categoria.usuario_responsable.nombre_completo if nueva_categoria.usuario_responsable else None
+                'usuario_responsable': nueva_categoria.usuario_responsable.nombre_completo if nueva_categoria.usuario_responsable else None,
+                'plantilla_descripcion': nueva_categoria.plantilla_descripcion
             }
         }), 201
         
@@ -2335,9 +2341,13 @@ def editar_categoria(categoria_id):
         nombre = data.get('nombre')
         id_departamento = data.get('id_departamento')
         id_usuario = data.get('id_usuario')
+        plantilla_descripcion = data.get('plantilla_descripcion')
         
         if nombre:
             categoria.nombre = nombre
+        
+        if plantilla_descripcion is not None:  # Permite actualizar a None
+            categoria.plantilla_descripcion = plantilla_descripcion
         
         if id_departamento:
             # Verificar que el departamento existe
@@ -2373,7 +2383,8 @@ def editar_categoria(categoria_id):
                 'id_departamento': categoria.id_departamento,
                 'departamento': categoria.departamento.nombre,
                 'id_usuario': categoria.id_usuario,
-                'usuario_responsable': categoria.usuario_responsable.nombre_completo if categoria.usuario_responsable else None
+                'usuario_responsable': categoria.usuario_responsable.nombre_completo if categoria.usuario_responsable else None,
+                'plantilla_descripcion': categoria.plantilla_descripcion
             }
         }), 200
         
@@ -2483,7 +2494,8 @@ def debug_agentes_categoria_completo(categoria_id):
                 'id': categoria.id,
                 'nombre': categoria.nombre,
                 'departamento_id': categoria.id_departamento,
-                'departamento_nombre': categoria.departamento.nombre
+                'departamento_nombre': categoria.departamento.nombre,
+                'plantilla_descripcion': categoria.plantilla_descripcion
             },
             'rol_agente': {
                 'id': rol_agente.id,

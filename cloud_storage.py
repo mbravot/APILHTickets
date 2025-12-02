@@ -38,17 +38,25 @@ class CloudStorageManager:
             # Si no hay credenciales por defecto, usar archivo de credenciales
             credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             if credentials_path and os.path.exists(credentials_path):
-                self.client = storage.Client.from_service_account_json(
-                    credentials_path, project=self.project_id
-                )
-                self.bucket = self.client.bucket(self.bucket_name)
-                logging.info(f"Cliente de Cloud Storage inicializado con credenciales desde: {credentials_path}")
+                try:
+                    self.client = storage.Client.from_service_account_json(
+                        credentials_path, project=self.project_id
+                    )
+                    self.bucket = self.client.bucket(self.bucket_name)
+                    logging.info(f"Cliente de Cloud Storage inicializado con credenciales desde: {credentials_path}")
+                except Exception as e:
+                    logging.warning(f"⚠️ No se pudieron usar las credenciales desde {credentials_path}: {str(e)}")
+                    logging.warning("⚠️ Cloud Storage no estará disponible. La aplicación funcionará en modo local.")
+                    self.client = None
+                    self.bucket = None
             else:
-                logging.error("❌ No se encontraron credenciales para Google Cloud Storage")
+                logging.warning("⚠️ No se encontraron credenciales para Google Cloud Storage")
+                logging.warning("⚠️ Cloud Storage no estará disponible. La aplicación funcionará en modo local.")
                 self.client = None
                 self.bucket = None
         except Exception as e:
-            logging.error(f"❌ Error al inicializar cliente de Cloud Storage: {str(e)}")
+            logging.warning(f"⚠️ Error al inicializar cliente de Cloud Storage: {str(e)}")
+            logging.warning("⚠️ Cloud Storage no estará disponible. La aplicación funcionará en modo local.")
             self.client = None
             self.bucket = None
     
