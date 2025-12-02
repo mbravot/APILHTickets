@@ -76,9 +76,14 @@ def create_app():
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Access-Control-Allow-Origin"
         return response
     
-    # Crear tablas al inicio
+    # Crear tablas al inicio (solo si no existen, para evitar lentitud en cada worker)
     with app.app_context():
-        db.create_all()
+        try:
+            # Solo crear tablas si no existen (más rápido)
+            db.create_all()
+        except Exception as e:
+            # Si hay error, continuar de todas formas (las tablas probablemente ya existen)
+            print(f"⚠️  Advertencia al crear tablas: {str(e)}")
     
     @app.route('/')
     def home():

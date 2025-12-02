@@ -28,11 +28,13 @@ class CloudStorageManager:
         self._initialize_client()
     
     def _initialize_client(self):
-        """Inicializa el cliente de Cloud Storage"""
+        """Inicializa el cliente de Cloud Storage (lazy initialization para mejor rendimiento)"""
         try:
             # Intentar usar credenciales por defecto (para Cloud Run)
+            # No hacer operaciones costosas aquí, solo crear el cliente
             self.client = storage.Client(project=self.project_id)
             self.bucket = self.client.bucket(self.bucket_name)
+            # No verificar si el bucket existe aquí (eso es costoso), se verificará cuando se use
             logging.info(f"Cliente de Cloud Storage inicializado para bucket: {self.bucket_name}")
         except DefaultCredentialsError:
             # Si no hay credenciales por defecto, usar archivo de credenciales

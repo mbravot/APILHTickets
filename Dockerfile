@@ -27,4 +27,6 @@ ENV FLASK_ENV=production
 ENV FLASK_DEBUG=0
 
 # Comando para ejecutar la aplicación
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app:app"] 
+# Optimizado para Cloud Run: 1 worker con threads para mejor uso de memoria
+# Timeout aumentado a 300s para permitir inicialización lenta
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "300", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "50", "--preload", "app:app"] 
